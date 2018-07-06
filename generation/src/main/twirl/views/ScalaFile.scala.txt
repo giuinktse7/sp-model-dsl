@@ -1,0 +1,13 @@
+@(packageName: String, xs: Seq[String])
+
+@if(packageName.nonEmpty) {
+  package @packageName
+
+  @for(x <- xs if x.nonEmpty) {
+    @x
+  }
+} else {
+    @for(x <- xs if x.nonEmpty) {
+     @x
+    }
+  }

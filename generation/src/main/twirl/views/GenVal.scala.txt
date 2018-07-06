@@ -1,0 +1,2 @@
+@(name: String, value: String, typeName: String)
+val @name: @typeName = @value

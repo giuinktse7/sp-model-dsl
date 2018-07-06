@@ -1,0 +1,9 @@
+@(className: String, xs: Seq[codegen.definition.CaseVal])
+
+import monocle.macros.Lenses
+
+@@Lenses case class @(className)(
+  @for((x, index) <- xs.zipWithIndex) {
+    @x.name: @x.className = @x.value @if(index < xs.size - 1) { , }
+  }
+)
