@@ -27,9 +27,6 @@ object Types {
 
   object ID {
     def apply(): java.util.UUID = java.util.UUID.randomUUID()
+    def validIdentifier(length: Int): String = "Generated_" + ID().toString.take(length).replaceAll("-", "_")
   }
-
-  implicit def stringToSPValue(x: String): SPValue = SPValue(x)
-  implicit def intToSPValue(x: Int): SPValue = SPValue(x)
-  implicit def boolToSPValue(x: Boolean): SPValue = SPValue(x)
 }

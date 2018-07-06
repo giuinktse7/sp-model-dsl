@@ -9,7 +9,7 @@ import OperationNode.operationToNode
 object ExampleModel {
   val id = java.util.UUID.randomUUID()
   java.util.UUID.fromString(id.toString)
-
+/*
   def create(): List[Identifiable] = {
     val t1 = Thing("v1", AttributeMap("domain"-> List("foo", "bar")))
     val t2 = Thing("v2", AttributeMap("domain"-> List(true, false)))
@@ -35,5 +35,5 @@ object ExampleModel {
 
     model
   }
-
+*/
 }

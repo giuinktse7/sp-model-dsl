@@ -2,21 +2,63 @@
 import java.nio.file.Paths
 
 import codegen._
-import codegen.definition.{CaseClassDefinition, CaseVal, FieldDefinition}
+import codegen.definition.{CaseClassDefinition, FieldDefinition}
 import fs2.Stream
 import Generate.Implicits._
-import codegen.model.{Attributes, Operation, Thing}
 import Generate._
-import play.api.libs.json.{JsObject, JsString}
+import codegen.buildermodel.Gen.GenThing
+import codegen.model.Types.ID
+import org.scalafmt.Scalafmt
 
 object Main {
+  import monocle.macros.Lenses
+  @Lenses case class MainThing(
+                                data: SubThing = SubThing()
+                              )
+
+  @Lenses case class SubThing(
+                               config: Config = Config(),
+                               parentId: String = "abc123"
+                             )
+
+  @Lenses case class Config(
+                             width: BigDecimal = 28.7,
+                             height: BigDecimal = 25.2
+                           )
+
   def main(args: Array[String]): Unit = {
-    val operation = Operation("My operation")
+    // thingExample()
 
-    val thing = Thing("Test", JsObject(Seq("a" -> JsString("25"), "b" -> JsObject(Seq("c" -> JsString("10"))))), java.util.UUID.randomUUID())
+    println(MainThing())
 
-    val test = Attributes(JsObject(Seq("a" -> JsString("25"), "b" -> JsObject(Seq("c" -> JsString("10"))))))
-    println(test.generated)
+    /*
+    val rootPath = Paths.get("generation/src/main/scala")
+    val relativePath = Paths.get("codegen/generated")
+
+    val file = ScalaFile(rootPath, relativePath, "Model", classes)
+    Generate.writeFile(file).compile.drain.unsafeRunSync()
+    */
+  }
+
+  def thingExample(): Unit = {
+
+    val attributes = Attribute(
+      "parentId" -> "abc123",
+      "config" -> Attribute("height" -> 25.2, "width" -> 28.7).named("Config")
+    ).named("SubThing")
+
+    val thing = GenThing("MainThing", attributes, ID())
+
+
+    println(show(thing))
+  }
+
+  def show[A: Generate](gen: A*): String = {
+    val data = gen.map(_.generated).toList
+    val hoists = data.flatMap(_.dependencies).distinct
+    val classes = data.map(_.result)
+
+    Scalafmt.format((hoists ::: classes).mkString("\n")).get
   }
 
   def genExample(): Unit = {
