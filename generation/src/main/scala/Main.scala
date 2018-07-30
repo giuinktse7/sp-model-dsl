@@ -14,18 +14,9 @@ import Generate._
 import play.api.libs.json.JsObject
 
 object Main {
+
   def main(args: Array[String]): Unit = {
-    // thingExample()
-
     create()
-
-    /*
-    val rootPath = Paths.get("generation/src/main/scala")
-    val relativePath = Paths.get("codegen/generated")
-
-    val file = ScalaFile(rootPath, relativePath, "Model", classes)
-    Generate.writeFile(file).compile.drain.unsafeRunSync()
-    */
   }
 
   def create(): Unit = {
@@ -34,7 +25,6 @@ object Main {
 
     val conditionForO1 = Conditional((5 === 2) && ("foo" === "bar"))
     val o1 = Operation("o1", List(conditionForO1))
-
 
     val conditionForO2 = Conditional("k" === "e")
     val o2 = Operation("o2", List(conditionForO2))
@@ -48,9 +38,8 @@ object Main {
       o2 has t2
     )
 
-
     val struct = Struct("struct")(items)
-    val model = Model("TestModel", List(t1, t2))
+    val model = Model("TestModel", List(t1, t2, struct))
 
       println(show(model.generated))
   }
@@ -80,8 +69,7 @@ object Main {
       FieldDefinition("to", "Point")
     )
 
-    val rootPath = Paths.get("src/main/scala")
-    val directory = rootPath.resolve(Paths.get("codegen/generated"))
+    val directory = Paths.get("codegen/generated")
 
     val files = Stream(lineGen, pointGen) // Stream of Generate[A]
       .map(g => ScalaFile(directory, g)) // Convert each Generate[A] to a ScalaFile[A] to be created in 'directory'

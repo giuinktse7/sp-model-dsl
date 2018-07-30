@@ -1,3 +1,0 @@
-@(x: codegen.definition.CaseVal)
-
-@x.name: @x.className = @x.value

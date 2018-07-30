@@ -1,3 +1,0 @@
-@(obj: play.api.libs.json.JsObject)
-
-Json.parse("""@obj.toString""").validate[JsObject].get

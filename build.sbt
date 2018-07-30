@@ -19,7 +19,6 @@ lazy val macros = (project in file("macros"))
 
 
 lazy val generation = (project in file("generation"))
-  .enablePlugins(SbtTwirl)
   .settings(commonSettings ++ Seq(
     mainClass in (Compile, run) := Some("Main"),
     rootDependencies

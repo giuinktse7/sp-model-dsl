@@ -43,7 +43,8 @@ sealed trait Dependency {
 }
 
 object Dependency {
-  val ImportOrder = 0
+  val PackageOrder = 0
+  val ImportOrder = 1
   val ClassOrder = 10
 
   def extractDependencies(dependency: Dependency): Set[Dependency] = {
@@ -89,6 +90,13 @@ case class ImportDependency(text: String) extends Dependency {
     case other => order.compareTo(other.order)
   }
   override def order: Int = Dependency.ImportOrder
+}
+
+case class PackageDependency(name: String) extends Dependency {
+  override def code: String = s"package $name"
+  override def dependencies: Set[Dependency] = Set()
+  override def comparePriority(that: Dependency): Int = order.compareTo(that.order)
+  override def order: Int = Dependency.PackageOrder
 }
 
 case class Result(result: String, dependencies: Set[Dependency] = Set()) {
@@ -153,14 +161,18 @@ object Generate {
   }
 
   object Implicits {
-    implicit val genCaseClass: Generate[CaseClassDefinition] = Generate.pureObj { c =>
-      views.txt.CaseClass(c.clazz, c.fields).body
+    implicit val genCaseClass: Generate[CaseClassDefinition] = Generate.obj { c =>
+      val monocle = ImportDependency("monocle.macros.Lenses")
+      val res = s"@Lenses case class ${c.clazz}(${c.fields.map(x => s"${x.name}: ${x.className}").mkString(", ")})"
+
+      Result(res, Set(monocle))
     }
 
     implicit def genFile[A: Generate]: Generate[ScalaFile[A]] = Generate.obj { file =>
       val contentGen = file.contents.map(_.generated)
-      val res = views.txt.ScalaFile(file.packageName, contentGen.map(_.result), Dependency.fold(contentGen.flatMap(_.dependencies).toSet)).body
-      Result(res)
+      val code = contentGen.map(_.result).mkString("\n")
+
+      Result(code, contentGen.flatMap(_.dependencies).toSet + PackageDependency(file.packageName))
     }
 
     implicit val genEmpty: Generate[EmptyDefinition] = Generate.pureExpression { _ => "" }
@@ -176,7 +188,9 @@ object Generate {
     implicit val genCaseClassNew: Generate[CaseClass] = {
       Generate.obj { c =>
         val monocle = ImportDependency("monocle.macros.Lenses")
-        Result(views.txt.NewCaseClass(c.name, c.fields).body, c.dependencies ++ c.fields.flatMap(_.dependencies) + monocle)
+        val res = s"@Lenses case class ${c.name}(${c.caseVals.map(_.generated.result).mkString(", ")})"
+
+        Result(res, c.dependencies + monocle)
       }
     }
 
@@ -237,7 +251,7 @@ object Generate {
     }
 
     def genThingCaseVals(thing: GenThing): List[CaseVal] = {
-      val attrCaseVal = thing.attrObject.toGen("attrObject")
+      val attrCaseVal = thing.attrObject.toGen("attributes")
       List(
         CaseVal("name", thing.name),
         attrCaseVal,
@@ -342,7 +356,7 @@ object Generate {
     }
 
     implicit val genCaseVal: Generate[CaseVal] = Generate.pureNoFormat { caseVal =>
-      views.txt.CaseVal(caseVal).body
+      s"${caseVal.name}: ${caseVal.className} = ${caseVal.value}"
     }
 
     implicit def genList[A: Generate]: Generate[List[A]] = Generate.expression { seq =>

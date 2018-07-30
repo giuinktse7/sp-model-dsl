@@ -2,8 +2,8 @@ package codegen.definition
 
 import codegen.Dependency
 
-case class CaseClass(name: String, outerDependencies: Set[Dependency], fields: CaseVal*) {
-  val dependencies: Set[Dependency] = (fields.flatMap(_.dependencies) ++ outerDependencies).toSet
+case class CaseClass(name: String, outerDependencies: Set[Dependency], caseVals: CaseVal*) {
+  val dependencies: Set[Dependency] = (caseVals.flatMap(_.dependencies) ++ outerDependencies).toSet
 }
 
 object CaseClass {

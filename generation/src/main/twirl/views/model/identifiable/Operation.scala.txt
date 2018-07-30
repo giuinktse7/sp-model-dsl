@@ -1,8 +1,0 @@
-@(operation: codegen.model.Operation)
-
-Operation(
-  "@operation.name",
-  List(),
-  @_root_.views.txt.util.JsObject(operation.attributes),
-  UUID.fromString("@operation.id.toString")
-)

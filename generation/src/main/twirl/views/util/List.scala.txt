@@ -1,7 +1,0 @@
-@(items: Seq[Any])
-
-List(
-  @for((v, k) <- items.zipWithIndex) {
-    @v @if(k < items.length - 1) { , }
-  }
-)

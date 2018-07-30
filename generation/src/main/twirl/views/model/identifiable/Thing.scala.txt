@@ -1,7 +1,0 @@
-@(thing: codegen.model.Thing)
-
-Thing(
-  "@thing.name",
-  @_root_.views.txt.util.JsObject(thing.attributes),
-  UUID.fromString("@thing.id.toString")
-)
