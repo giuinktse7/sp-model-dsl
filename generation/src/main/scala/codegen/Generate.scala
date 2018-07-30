@@ -7,7 +7,9 @@ import codegen.definition._
 import codegen.model.Types.ID
 import codegen.model._
 import org.scalafmt.Scalafmt
-import play.api.libs.json._
+import Generate.GenOps
+import play.api.libs.json.JsObject
+import util.Utils
 
 trait Generate[A] {
 
@@ -20,9 +22,78 @@ trait Generate[A] {
   }
 }
 
-case class Result(result: String, dependencies: Set[String] = Set()) {
-  lazy val all: String = dependencies.mkString("\n") + result
-  def tupled = (result, dependencies)
+sealed trait Dependency {
+  /**
+    *
+    * @return The code for this dependency
+    */
+  def code: String
+  def dependencies: Set[Dependency]
+
+  /**
+    * @return -1 if this dependency is prioritized, 0 if they are equally prioritized, 1 if this dependency is not prioritized
+    */
+  def comparePriority(that: Dependency): Int
+
+  /**
+    * Order of priority when comparing different Dependencies.
+    * Dependencies with lower numbers appear higher up in the generated String.
+    */
+  def order: Int
+}
+
+object Dependency {
+  val ImportOrder = 0
+  val ClassOrder = 10
+
+  def extractDependencies(dependency: Dependency): Set[Dependency] = {
+    dependency.dependencies.flatMap(extractDependencies) + dependency
+  }
+
+  def fold(dependencies: Set[Dependency]): String = {
+    val allDependencies = dependencies.flatMap(extractDependencies).toIndexedSeq.distinct
+    val sortedDependencies = sortByPriority(allDependencies)
+
+
+    sortedDependencies.map(_.code).mkString("\n")
+  }
+
+  def sortByPriority(dependencies: Seq[Dependency]): Seq[Dependency] = {
+    dependencies.sortWith((a, b) => a.comparePriority(b) < 0)
+  }
+}
+
+case class CaseClassDependency(clazz: CaseClass) extends Dependency {
+  lazy val gen: Result = clazz.generated
+  override def code: String = gen.result
+
+  override def dependencies: Set[Dependency] = gen.dependencies
+
+  /**
+    * @return -1 if this dependency is prioritized, 0 if they are equally prioritized, 1 if this dependency is not prioritized
+    */
+  override def comparePriority(that: Dependency): Int = that match {
+    case CaseClassDependency(c) => this.clazz.name.compareTo(c.name)
+    case other => order.compareTo(other.order)
+  }
+
+  override def order: Int = Dependency.ClassOrder
+}
+
+case class ImportDependency(text: String) extends Dependency {
+  override def code: String = s"import $text"
+
+  override def dependencies: Set[Dependency] = Set()
+  override def comparePriority(that: Dependency): Int = that match {
+    case ImportDependency(p) => this.text.compareTo(p)
+    case other => order.compareTo(other.order)
+  }
+  override def order: Int = Dependency.ImportOrder
+}
+
+case class Result(result: String, dependencies: Set[Dependency] = Set()) {
+  def compile: String = List(Dependency.fold(dependencies), result).mkString("\n")
+  def tupled: (String, Set[Dependency]) = (result, dependencies)
 }
 
 
@@ -31,7 +102,7 @@ trait HasType {
 }
 
 object Generate {
-  type Dependency = CaseClass
+  import Instantiate._
 
   def topLevelFormatter(expr: String): String = {
     Scalafmt.format(expr).get
@@ -68,7 +139,7 @@ object Generate {
   }
 
   def writeFile[A: Generate](file: ScalaFile[A]): Stream[IO, Unit] = {
-    Stream.eval(IO(file.generated.all))
+    Stream.eval(IO(file.generated.compile))
       .through(text.utf8Encode)
       .through(io.file.writeAll(file.fullPath))
   }
@@ -88,7 +159,7 @@ object Generate {
 
     implicit def genFile[A: Generate]: Generate[ScalaFile[A]] = Generate.obj { file =>
       val contentGen = file.contents.map(_.generated)
-      val res = views.txt.ScalaFile(file.packageName, contentGen.map(_.result), contentGen.flatMap(_.dependencies).distinct).body
+      val res = views.txt.ScalaFile(file.packageName, contentGen.map(_.result), Dependency.fold(contentGen.flatMap(_.dependencies).toSet)).body
       Result(res)
     }
 
@@ -102,32 +173,28 @@ object Generate {
 
     implicit val genBoolean: Generate[Boolean] = Generate.pureNoFormat { if(_) "true" else "false" }
 
-    implicit val genCaseClassNew: Generate[CaseClass] = Generate.obj { c =>
-      Result(views.txt.NewCaseClass(c.name, c.fields).body, Set("import monocle.macros.Lenses") ++ c.dependencies ++ c.fields.flatMap(_.dependencies))
+    implicit val genCaseClassNew: Generate[CaseClass] = {
+      Generate.obj { c =>
+        val monocle = ImportDependency("monocle.macros.Lenses")
+        Result(views.txt.NewCaseClass(c.name, c.fields).body, c.dependencies ++ c.fields.flatMap(_.dependencies) + monocle)
+      }
     }
 
     implicit val genConditional: Generate[Conditional] = Generate.expression { c =>
-      val (res, deps) = c.proposition.generated.tupled
-      Result(s"Conditional($res)", deps)
+      val gen = c.proposition.map(_.gen)
+      val deps = gen.flatMap(_.dependencies).toSet
+      Result(s"Conditional(${gen.map(_.result).mkString(", ")})", deps)
     }
 
-    implicit val genBool: Generate[Bool] = Generate.expression(_.gen)
+    implicit val genConditionNode: Generate[ConditionNode] = Generate.expression(_.gen)
 
-    def genThingCaseClasses(thing: GenThing): CaseClass = {
-      val (topVal, restClasses) = thing.attrObject.toGen("data")
-      val relevantDependencies = (
-        restClasses.flatMap(_.dependencies)
-          ++ restClasses.flatMap { x =>
-          val (res, deps) = x.generated.tupled
-          deps + res
-        }
-        )
-
-      CaseClass.withDependencies(topVal.className, relevantDependencies.toSet, (topVal :: genThingCaseVals(thing)):_*)
+    def genThingCaseClass(thing: GenThing): CaseClass = {
+      val caseVals = genThingCaseVals(thing)
+      CaseClass(Utils.generateName("Thing", thing.name), caseVals:_*)
     }
 
     implicit val genThing: Generate[GenThing] = Generate.expression { thing =>
-      genThingCaseClasses(thing).generated
+      genThingCaseClass(thing).generated
     }
 
     implicit val genInt: Generate[Int] = Generate.pureNoFormat { s => s.toString }
@@ -157,40 +224,70 @@ object Generate {
 
 
     def operationCaseVals(operation: Operation): List[CaseVal] = {
-      val operationConditions = operation.conditions.generated
-      val opValue = s"List[Conditional](${operationConditions.result})"
+      val conditionalCaseVal = operation.conditions.map(_.generated)
+      val condValue = s"List[Conditional](${conditionalCaseVal.map(_.result).mkString(", ")})"
+      val condDeps = conditionalCaseVal.flatMap(_.dependencies).toSet
+
       List(
         CaseVal("name", operation.name),
-        CaseVal.rawQualified("conditions", opValue, "List[Conditional]").addDependencies(operationConditions.dependencies),
+        CaseVal.rawQualified("conditions", condValue, "List[Conditional]").addDependencies(condDeps),
         CaseVal("attributes", operation.attributes),
         CaseVal("id", operation.id)
       )
     }
 
     def genThingCaseVals(thing: GenThing): List[CaseVal] = {
-      val (attrCaseVal, deps) = thing.attrObject.toGen("attrObject")
+      val attrCaseVal = thing.attrObject.toGen("attrObject")
       List(
         CaseVal("name", thing.name),
-        attrCaseVal.addDependencies(deps.flatMap(_.generated.dependencies).toSet),
+        attrCaseVal,
         CaseVal("id", thing.id)
       )
     }
 
-    /**
-      * case class Struct(
-      * name: String,
-      * items: IdentifiableGraph,
-      * attributes: AttributeMap = AttributeMap(),
-      * id: ID = ID()
-      */
+    private def identifiableGraphToCaseVal(graph: IdentifiableGraph): CaseVal = {
+      genIdentifiableGraph(graph) match {
+        case Left(caseClass) => CaseVal.defaultInstance(graph.name, caseClass.name).addDependencies(CaseClassDependency(caseClass))
+        case Right(identifiable) => identifiableCaseVal(identifiable, Utils.generateName("Attr", identifiable.name))
+      }
+    }
+
+    def structCaseClass(struct: Struct): CaseClass = {
+      val idGraphVals = struct.items.map(identifiableGraphToCaseVal)
+
+      val caseVals = List(
+        CaseVal("name", struct.name),
+        CaseVal("attributes", struct.attributes),
+        CaseVal("id", struct.id)
+      ) ++ idGraphVals
+
+      CaseClass(Utils.generateName("Struct", struct.name), caseVals:_*)
+    }
+
     implicit val genStruct: Generate[Struct] = Generate.expression { struct =>
-      Result("")
+      structCaseClass(struct).generated
     }
 
     implicit val genIdentifiable: Generate[Identifiable] = Generate.expression {
       case x: Operation => x.generated
       case x: GenThing => x.generated
       case x: Struct => x.generated
+      case x => throw new IllegalArgumentException(s"There is no implicit Generate type class for $x.")
+    }
+
+    def identifiableCaseVal(identifiable: Identifiable, className: String): CaseVal = identifiable match {
+      case _: Operation =>
+        val (res, deps) = identifiable.generated.tupled
+        CaseVal(identifiable.name, "Operation", res).addDependencies(deps)
+      case _: Struct =>
+        val (res, deps) = identifiable.generated.tupled
+        CaseVal.defaultInstance(identifiable.name, "Struct").addDependencies(deps)
+      case thing: GenThing =>
+        val caseClass = CaseClassDependency(CaseClass(className, genThingCaseVals(thing):_*))
+        val classDep = CaseClassDependency(genThingCaseClass(thing))
+
+        CaseVal.defaultInstance(identifiable.name, caseClass.clazz.name).addDependencies(classDep, caseClass)
+      case x => throw new IllegalArgumentException(s"$x can not be used in an IdentifiableGraph.")
     }
 
     def genIdentifiableGraph(node: IdentifiableGraph): Either[CaseClass, Identifiable] = {
@@ -199,30 +296,14 @@ object Generate {
         val result = node.nodes.map { n =>
           genIdentifiableGraph(n) match {
             case Left(caseClass) =>
-              val deps: Set[String] = caseClass.generated.dependencies + caseClass.generated.result
-              (CaseVal.defaultInstance(n.name, caseClass.name), deps)
+              CaseVal.defaultInstance(n.name, caseClass.name).addDependencies(CaseClassDependency(caseClass))
 
             case Right(identifiable) =>
-              identifiable match {
-                case _: Operation =>
-                  val (res, deps) = identifiable.generated.tupled
-                  (CaseVal(n.name, "Operation", res), deps)
-                case _: Struct =>
-                  val (res, deps) = identifiable.generated.tupled
-                  (CaseVal.defaultInstance(n.name, "Struct"), deps)
-                case thing: GenThing =>
-                  val dependencies = thing.generated.dependencies
-                  val caseClass = CaseClass.withDependencies(s"Gen_${thing.name}", dependencies, genThingCaseVals(thing):_*)
-                  val genClass = genThingCaseClasses(thing)
-
-                  if (thing.name == "t1") println(genClass.dependencies ++ caseClass.dependencies)
-                  (CaseVal.defaultInstance(n.name, caseClass.name), genClass.dependencies ++ caseClass.dependencies ++ caseClass.generated.dependencies + caseClass.generated.result)
-              }
+              identifiableCaseVal(identifiable, n.className)
           }
         }
 
         // val className = s"${ID.validIdentifier(length = 5)}_GenFor_${node.name}"
-        val className = s"Gen_${node.name}"
         val ownCaseVals = node.self match {
           case o: Operation => operationCaseVals(o)
           case t: GenThing => genThingCaseVals(t)
@@ -230,29 +311,33 @@ object Generate {
         }
 
         val selfGen = node.self.generated.dependencies
+        val caseVals = ownCaseVals ++ result
 
-        val deps = result.foldLeft(Set[String]()) { case (acc, (_, nextDeps)) => acc ++ nextDeps } ++ ownCaseVals.flatMap(_.dependencies) ++ selfGen
-        val caseVals = ownCaseVals ++ result.map { case (caseVal, _) => caseVal }.toSeq
-
-        Left(CaseClass.withDependencies(className, deps, caseVals:_*))
+        Left(CaseClass.withDependencies(node.className, selfGen, caseVals:_*))
       }
     }
 
     implicit val genIdentifiableGraph: Generate[IdentifiableGraph] = Generate.expression { graph =>
       genIdentifiableGraph(graph) match {
-        case Left(caseClass) => caseClass.generated
+        case Left(caseClass) => Set[Dependency](CaseClassDependency(caseClass)).generated
         case Right(identifiable) => identifiable.generated
       }
     }
 
-    implicit val genModel: Generate[Model] = Generate.pureObj { model =>
-      views.txt.model.Model(model).body
+    implicit val genDependencies: Generate[Set[Dependency]] = Generate.pureExpression { deps =>
+      Dependency.fold(deps)
+    }
+
+    implicit val genModel: Generate[Model] = Generate.expression { model =>
+      val caseVals = model.items.map(x => x.instance.caseVal(x.name))
+
+      CaseClass(model.className, caseVals:_*).generated
     }
 
     implicit val genJsObject: Generate[JsObject] = Generate.pureExpression { obj =>
-      if (obj.toString() == "{}") "JsObject.empty"
+      if (obj.toString == "{}") "JsObject.empty"
       else s"""
-         |Json.parse(\"\"\"${obj.toString()}\"\"\").validate[JsObject].get
+         |Json.parse(\"\"\"${obj.toString}\"\"\").validate[JsObject].get
          |""".stripMargin
     }
 
@@ -260,7 +345,15 @@ object Generate {
       views.txt.CaseVal(caseVal).body
     }
 
-    implicit def genSeq[A: Generate]: Generate[List[A]] = Generate.expression { seq =>
+    implicit def genList[A: Generate]: Generate[List[A]] = Generate.expression { seq =>
+      val data = seq.map(_.generated)
+      val hoists = data.flatMap(_.dependencies)
+      val classes = data.map(_.result).mkString("\n")
+
+      Result(classes, hoists.toSet)
+    }
+
+    implicit def genSeq[A: Generate]: Generate[Seq[A]] = Generate.expression { seq =>
       val data = seq.map(_.generated)
       val hoists = data.flatMap(_.dependencies)
       val classes = data.map(_.result).mkString("\n")

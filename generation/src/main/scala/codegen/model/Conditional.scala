@@ -5,22 +5,30 @@ import codegen.{Generate, Result}
 import codegen.Generate._
 
 case class Conditional(
-                      proposition: Bool,
-                      actions: List[Int] = List(), // TODO Change Int to Action
-                      config: AttrObject = AttrObject()
+                        proposition: Seq[ConditionNode],
+                        actions: List[Int] = List(), // TODO Change Int to Action
+                        config: AttrObject = AttrObject()
                       )
+
+object Conditional {
+  def apply(nodes: ConditionNode*): Conditional = new Conditional(nodes, List(), AttrObject())
+  def apply(nodes: Seq[ConditionNode], actions: List[Int], config: AttrObject): Conditional = {
+    new Conditional(nodes, actions, config)
+  }
+}
 
 object Test {
 
   implicit class ConditionalDSL[A: Generate](a: A) {
-    def ^==(that: A): Bool = Equal(a, that)
-    def ^!=(that: A): Bool = Not(Equal(a, that))
+    def ===(that: A): Bool = Equal(a, that)
+    def !==(that: A): Bool = Not(Equal(a, that))
+
+    // TODO
+    def :=(that: A): Definition[A] = ???
   }
 }
 
-sealed trait Bool {
-  def gen: Result
-
+sealed trait Bool extends ConditionNode {
   def &&(node: Bool): Bool = And(this, node)
   def V(node: Bool): Bool = Or(this, node)
   def Λ(node: Bool): Bool = And(this, node)
@@ -30,15 +38,29 @@ object Bool {
   def ¬(node: Bool): Bool = Not(node)
 }
 
-sealed trait Node
+sealed trait ConditionNode {
+  def gen: Result
+}
 
-object Node {
+object ConditionNode {
   def point[A: Generate](a: A): Value[A] = Value(a)
 }
 
-case class Value[A: Generate](a: A) extends Node {
+case class Value[A: Generate](a: A) extends ConditionNode {
+  def gen: Result = {
+    val generated = a.generated
+    generated.copy(result = s"Value(${generated.result})")
+  }
+
   def ^==(that: A): Bool = Equal(a, that)
   def ^!=(that: A): Bool = Not(Equal(a, that))
+}
+
+case class Definition[A: Generate](a: A) extends ConditionNode {
+  def gen: Result = {
+    val generated = a.generated
+    generated.copy(result = s"Definition(${generated.result})")
+  }
 }
 
 case class And(fst: Bool, snd: Bool) extends Bool {

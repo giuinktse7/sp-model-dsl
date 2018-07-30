@@ -1,10 +1,8 @@
-@(packageName: String, xs: Seq[String], dependencies: Seq[String])
+@(packageName: String, xs: Seq[String], dependencies: String)
 @if(packageName.nonEmpty) { package @packageName }
 
 @import views.txt.util
-@for(d <- dependencies if d.nonEmpty) {
-     @d.replaceAll("\n", "")
-   }
+@dependencies
 
 @for(x <- xs if x.nonEmpty) {
  @x

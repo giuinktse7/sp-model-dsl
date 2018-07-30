@@ -54,7 +54,7 @@ case class StructNode(
 
 case class Struct(
                    name: String,
-                  items: IdentifiableGraph,
+                  items: Seq[IdentifiableGraph],
                   attributes: AttributeMap = AttributeMap(),
                   id: ID = ID()
                  ) extends Identifiable {
@@ -62,7 +62,7 @@ case class Struct(
 }
 
 object Struct {
-  def apply(name: String)(items: IdentifiableGraph): Struct = new Struct(name, items)
+  def apply(name: String)(items: IdentifiableGraph*): Struct = new Struct(name, items)
 }
 
 case class OperationOrderSpecification(

@@ -1,7 +1,7 @@
 package codegen
 
 import codegen.definition.{CaseClass, CaseVal}
-import codegen.model.Types.{ID, SPValue}
+import codegen.model.Types.SPValue
 import play.api.libs.json._
 import Generate.Implicits._
 import codegen.Attribute._
@@ -17,18 +17,18 @@ sealed trait Attribute {
     * @param key key to work from
     * @return A pair of (CaseVal, List[[[Dependency]]])
     */
-  def toGen(key: String): (CaseVal, List[Dependency]) = {
+  def toGen(key: String): CaseVal = {
     this match {
-      case AttrString(str) => (CaseVal(key, str), List())
-      case AttrBoolean(bool) => (CaseVal(key, bool), List())
-      case AttrNumber(n) => (CaseVal(key, n), List())
+      case AttrString(str) => CaseVal(key, str)
+      case AttrBoolean(bool) => CaseVal(key, bool)
+      case AttrNumber(n) => CaseVal(key, n)
       case AttrList(_, generatedValues, qualifier) =>
         val result = s"Seq(${generatedValues.map(_.result).mkString(", ")})"
         val deps = generatedValues.flatMap(_.dependencies).toSet
 
-        (CaseVal.rawQualified(key, result, qualifier).addDependencies(deps), List())
+        CaseVal.rawQualified(key, result, qualifier).addDependencies(deps)
       // case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${ID.validIdentifier(length = 5)}_GenFor_$key")
-      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"Generated_$key")
+      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"GeneratedAttributes_$key")
       case obj: NamedAttrObject => toCaseVal(key, obj, obj.values, obj.name)
     }
   }
@@ -36,11 +36,6 @@ sealed trait Attribute {
 
 object Attribute {
   import scala.reflect.runtime.universe.typeOf
-
-  /**
-    * Represents dependencies for a generated piece of code (usually imports)
-    */
-  type Dependency = CaseClass
 
   implicit def listToValid[A: Manifest: Generate](list: Seq[A]): ValidAttr = TypedAttr(list, s"Seq[${typeOf[A].typeSymbol.fullName}]")
   implicit def valueToValid(value: Any): ValidAttr = AnyAttr(value)
@@ -107,17 +102,12 @@ object Attribute {
     override def toSPValue: JsObject = JsObject(values.map { case (k, v) => k -> v.toSPValue })
   }
 
-  private def toCaseVal(key: String, attribute: Attribute, values: Seq[(String, Attribute)], className: String): (CaseVal, List[Dependency]) = {
+  private def toCaseVal(key: String, attribute: Attribute, values: Seq[(String, Attribute)], className: String): CaseVal = {
     val instance = CaseVal.defaultInstance(key, className)
-    val initialFoldValue = (List[CaseVal](), List[Dependency]())
 
-    val (caseVals, caseClasses) = values
-      .map { case (k, v) => v.toGen(k) }
-      .foldLeft(initialFoldValue) { case ((cvs, prevDependencies), (cv, dependencies)) =>
-        (cv :: cvs, (dependencies ++ prevDependencies).distinct)
-      }
+    val caseVals = values.map { case (k, v) => v.toGen(k) }
+    val newClassDependency = CaseClassDependency(CaseClass(instance.className, caseVals:_*))
 
-    val newClass = CaseClass(instance.className, caseVals:_*)
-    (instance, newClass :: caseClasses)
+    instance.addDependencies(newClassDependency)
   }
 }
