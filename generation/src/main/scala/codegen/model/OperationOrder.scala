@@ -16,7 +16,7 @@ case class Arbitrary(operationOrders: List[OperationOrder]) extends OperationOrd
 case class Sequential(operationOrders: List[OperationOrder]) extends OperationOrder
 case class SometimeSequence(operationOrders: List[OperationOrder]) extends OperationOrder
 case class Other(operationOrders: List[OperationOrder]) extends OperationOrder
-case class OperationNode(operation: ID, conditions: List[Condition] = List(), operationOrders: List[OperationOrder] = List()) extends OperationOrder
+case class OperationNode(operation: ID, conditions: List[Conditional] = List(), operationOrders: List[OperationOrder] = List()) extends OperationOrder
 
 object OperationNode {
   def apply(id: ID): OperationNode = OperationNode(id, List())
