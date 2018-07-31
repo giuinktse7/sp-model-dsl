@@ -6,17 +6,18 @@ import Generate.GenOps
 import Generate.Implicits._
 
 trait CaseClassLike[A] {
-  def caseVals(a: A): Seq[CaseVal]
+  def caseVals(a: Namespace[A]): Seq[CaseVal]
 }
 
 object CaseClassLike {
-  implicit class CaseClassLikeOps[A](val value: A) extends AnyVal {
+  implicit class CaseClassLikeOps[A](val value: Namespace[A]) extends AnyVal {
     def caseVals(implicit c: CaseClassLike[A]): Seq[CaseVal] = c.caseVals(value)
   }
 
-  def apply[A](f: A => Seq[CaseVal]): CaseClassLike[A] = f(_)
+  def apply[A](f: Namespace[A] => Seq[CaseVal]): CaseClassLike[A] = f(_)
   object Implicits {
-    implicit val caseClassLikeOperation: CaseClassLike[Operation] = CaseClassLike { op =>
+    implicit val caseClassLikeOperation: CaseClassLike[Operation] = CaseClassLike { namespace =>
+      val Namespace(op, space) = namespace
       val conditionalCaseVal = op.conditions.map(_.generated)
       val condValue = s"List[Conditional](${conditionalCaseVal.map(_.result).mkString(", ")})"
       val condDeps = conditionalCaseVal.flatMap(_.dependencies).toSet
@@ -30,8 +31,9 @@ object CaseClassLike {
 
     }
 
-    implicit val caseClassLikeGenThing: CaseClassLike[GenThing] = CaseClassLike { thing =>
-      val attrCaseVal = thing.attrObject.toGen("attributes")
+    implicit val caseClassLikeGenThing: CaseClassLike[GenThing] = CaseClassLike { ns =>
+      val Namespace(thing, space) = ns
+      val attrCaseVal = thing.attrObject.toGen("attributes", space)
       List(
         CaseVal("name", thing.name),
         attrCaseVal,
@@ -39,10 +41,14 @@ object CaseClassLike {
       )
     }
 
-    implicit val caseClassLikeIdentifiable: CaseClassLike[Identifiable] = CaseClassLike {
-      case o: Operation => o.caseVals
-      case t: GenThing => t.caseVals
-      case x => throw new IllegalArgumentException(s"Can not find a CaseClassLike[_] in scope for $x.")
+    implicit val caseClassLikeIdentifiable: CaseClassLike[Identifiable] = CaseClassLike { ns =>
+      val Namespace(value, space) = ns
+      value match {
+        case o: Operation => Namespace(o, space).caseVals
+        case t: GenThing => Namespace(t, space).caseVals
+        case x => throw new IllegalArgumentException(s"Can not find a CaseClassLike[_] in scope for $x.")
+      }
     }
+
   }
 }

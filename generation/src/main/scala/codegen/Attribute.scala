@@ -17,7 +17,7 @@ sealed trait Attribute {
     * @param key key to work from
     * @return A pair of (CaseVal, List[[[Dependency]]])
     */
-  def toGen(key: String): CaseVal = {
+  def toGen(key: String, namespace: String = ""): CaseVal = {
     this match {
       case AttrString(str) => CaseVal(key, str)
       case AttrBoolean(bool) => CaseVal(key, bool)
@@ -28,8 +28,8 @@ sealed trait Attribute {
 
         CaseVal.rawQualified(key, result, qualifier).addDependencies(deps)
       // case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${ID.validIdentifier(length = 5)}_GenFor_$key")
-      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"GeneratedAttributes_$key")
-      case obj: NamedAttrObject => toCaseVal(key, obj, obj.values, obj.name)
+      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${namespace}Generated_Attributes_$key")
+      case obj: NamedAttrObject => toCaseVal(key, obj, obj.values, namespace + obj.name)
     }
   }
 }

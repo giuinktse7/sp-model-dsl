@@ -85,23 +85,21 @@ object Generate {
     Stream.emits(gs).covary[F]
   }
 
-
   def parseIdentifiableGraph(node: IdentifiableGraph, classPrefix: String = ""): Either[CaseClass, Identifiable] = {
     if (node.nodes.isEmpty) Right(node.self)
     else {
       val nextPrefix = if (classPrefix nonEmpty) classPrefix + node.name else node.name + "_"
       val result = node.nodes.map { n =>
         parseIdentifiableGraph(n, nextPrefix) match {
-          case Left(caseClass) => caseClass.instance.asCaseVal(n.name)
-          case Right(identifiable) => {
+          case Left(caseClass) => caseClass.localInstance.asCaseVal(n.name)
+          case Right(identifiable) =>
             println(s"innermost with ${identifiable.name}")
-            NamespacedIdentifiable(classPrefix, identifiable).instance.asCaseVal(identifiable.name)
-          }
+            Namespace(identifiable, nextPrefix).instance.asCaseVal(identifiable.name)
         }
       }
 
       val selfGen = node.self.generated.dependencies
-      val caseVals = node.self.caseVals ++ result
+      val caseVals = Namespace(node.self, classPrefix).caseVals ++ result
 
       Left(CaseClass.withDependencies(s"${classPrefix}_${node.className}", selfGen, caseVals:_*))
     }
@@ -149,12 +147,13 @@ object Generate {
 
     implicit val genConditionNode: Generate[ConditionNode] = Generate.expression(_.gen)
 
-    def genThingCaseClass(thing: GenThing): CaseClass = {
-      CaseClass(Utils.generateName("Thing", thing.name), thing.caseVals:_*)
+    def genThingCaseClass(thing: Namespace[GenThing]): CaseClass = {
+      val qualifiedName = thing.namespace + thing.value.name
+      CaseClass(Utils.generateName("Thing", qualifiedName), thing.caseVals:_*)
     }
 
     implicit val genThing: Generate[GenThing] = Generate.expression { thing =>
-      genThingCaseClass(thing).generated
+      genThingCaseClass(Namespace.empty(thing)).generated
     }
 
     implicit val genInt: Generate[Int] = Generate.pureNoFormat { s => s.toString }
@@ -185,7 +184,7 @@ object Generate {
     private def identifiableGraphToCaseVal(graph: IdentifiableGraph): CaseVal = {
       parseIdentifiableGraph(graph) match {
         case Left(caseClass) => CaseVal.defaultInstance(graph.name, caseClass.name).addDependencies(CaseClassDependency(caseClass))
-        case Right(identifiable) => identifiable.instance.asCaseVal(identifiable.name)
+        case Right(identifiable) => identifiable.localInstance.asCaseVal(identifiable.name)
       }
     }
 
@@ -209,8 +208,8 @@ object Generate {
       //val graphs = model.items.flatMap(_.collectNodes)
       val graphs = model.items.toList
       val instances = graphs.map(x => (x, parseIdentifiableGraph(x))).map {
-        case (x, Left(caseClass)) => (x, caseClass.instance)
-        case (x, Right(identifiable)) => (x, identifiable.instance)
+        case (x, Left(caseClass)) => (x, caseClass.localInstance)
+        case (x, Right(identifiable)) => (x, identifiable.localInstance)
       }
 
       val itemList = instances.map { case (_, instance) => instance.result.result }.mkString(", ")
