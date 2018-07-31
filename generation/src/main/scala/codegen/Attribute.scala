@@ -94,7 +94,7 @@ object Attribute {
   case class AttrObject(values: (String, Attribute)*) extends Attribute {
     def named(name: String): NamedAttrObject = NamedAttrObject(name, values:_*)
     // def nameByKey(key: String): NamedAttrObject = named(s"${ID.validIdentifier(length = 5)}_GenFor_$key")
-    def nameByKey(key: String): NamedAttrObject = named(s"Generated_$key")
+    def nameByKey(key: String): NamedAttrObject = named(s"Generated_Attributes_$key")
 
     override def toSPValue: JsObject = JsObject(values.map { case (k, v) => k -> v.toSPValue })
   }

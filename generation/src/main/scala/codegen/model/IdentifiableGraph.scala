@@ -7,8 +7,10 @@ case class IdentifiableGraph(self: Identifiable, className: String, nodes: Simpl
   def name: String = self.name
   def id: ID = self.id
   def attributes: AttributeMap = self.attributes
-  def has(nodes: IdentifiableGraph*): IdentifiableGraph = copy(self, nodes = this.nodes.addAll(nodes))
+  def ->(nodes: IdentifiableGraph*): IdentifiableGraph = copy(self, nodes = this.nodes.addAll(nodes))
   def withClassName(name: String): IdentifiableGraph = copy(className = name)
+
+  def collectNodes: List[IdentifiableGraph] = this :: nodes.toList.flatMap(_.collectNodes)
 }
 
 

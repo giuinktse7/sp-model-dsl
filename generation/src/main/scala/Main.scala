@@ -16,32 +16,53 @@ import play.api.libs.json.JsObject
 object Main {
 
   def main(args: Array[String]): Unit = {
-    create()
+    //create()
+
+    val subThing = Thing.forGen("subThing", Attribute("domain" -> List("foo", "bar")))
+
+    val condition = Conditional((5 !== 2) && ("foo" === "bar"))
+    val someOperation = Operation("someOperation", List(condition))
+
+    val mainThing = Thing.forGen("mainThing", Attribute("someAttr" -> "kalle"))
+
+    val items = mainThing -> (
+      someOperation -> subThing
+    )
+
+    val model = Model("TestModel", items)
+
+    println(show(model.generated))
   }
 
   def create(): Unit = {
-    val t1 = Thing.forGen("t1", Attribute("domain"-> List("foo", "bar")))
-    val t2 = Thing.forGen("t2", Attribute("domain"-> List(true, false)))
+    val redThing = Thing.forGen("redThing", Attribute("domain"-> List("foo", "bar")))
+    val blueThing = Thing.forGen("blueThing", Attribute("domain"-> List(true, false)))
 
     val conditionForO1 = Conditional((5 === 2) && ("foo" === "bar"))
-    val o1 = Operation("o1", List(conditionForO1))
+    val someOperation = Operation("someOperation", List(conditionForO1))
 
     val conditionForO2 = Conditional("k" === "e")
     val o2 = Operation("o2", List(conditionForO2))
 
-    val r1 = Thing.forGen("r1", Attribute("someAttr" -> "kalle"))
+    val mainThing = Thing.forGen("mainThing", Attribute("someAttr" -> "kalle"))
 
     val sop = OperationOrder.Specification("Sequential", OperationOrder.Sequential())
 
+    /*
     val items = r1 has (
       o1 has (t1, t2),
       o2 has t2
     )
+    */
+
+    val items = mainThing -> (
+      someOperation -> redThing
+    )
 
     val struct = Struct("struct")(items)
-    val model = Model("TestModel", List(t1, t2, struct))
+    val model = Model("TestModel", struct)
 
-      println(show(model.generated))
+    println(show(model.generated))
   }
 
   def show(result: Result): String = {

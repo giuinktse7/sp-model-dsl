@@ -15,6 +15,12 @@ sealed trait Identifiable extends Equals {
   }
 }
 
+case class NamespacedIdentifiable(namespace: String, identifiable: Identifiable) extends Identifiable {
+  override val name: String = s"${namespace}_${identifiable.name}"
+  override val id: ID = identifiable.id
+  override val attributes: AttributeMap = identifiable.attributes
+}
+
 case class Operation(
                       name: String,
                       conditions: List[Conditional] = List(),
@@ -62,7 +68,7 @@ case class Struct(
 }
 
 object Struct {
-  def apply(name: String)(items: IdentifiableGraph*): Struct = new Struct(name, items)
+  def apply(name: String): Struct = new Struct(name)
 }
 
 case class OperationOrderSpecification(

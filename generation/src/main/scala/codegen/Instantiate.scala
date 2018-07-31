@@ -12,7 +12,7 @@ sealed trait Instantiate[A] {
 }
 
 case class Instance(result: Result, typeQualifier: String) {
-  def caseVal(name: String): CaseVal = CaseVal.rawQualified(name, result.result, typeQualifier).addDependencies(result.dependencies)
+  def asCaseVal(name: String): CaseVal = CaseVal.rawQualified(name, result.result, typeQualifier).addDependencies(result.dependencies)
 }
 
 object Instantiate {
@@ -25,6 +25,20 @@ object Instantiate {
 
   implicit class InstanceOps[A](val value: A) extends AnyVal {
     def instance(implicit in: Instantiate[A]): Instance = in.instance(value)
+  }
+
+  private def prefixName(prefix: String)(name: String): String = s"${prefix}_$name"
+
+  implicit val instantiateNameSpacedIdentifiable: Instantiate[NamespacedIdentifiable] = Instantiate { id =>
+    val newName = prefixName(id.namespace)(id.name)
+    val res: Identifiable = id.identifiable match {
+      case x: Operation => x.copy(name = newName)
+      case x: GenThing => x.copy(name = newName)
+      case x: Struct => x.copy(name = newName)
+      case x => throw new IllegalArgumentException(s"Can not find an Instantiate[_] in scope for $x.")
+    }
+
+    res.instance
   }
 
   implicit val instantiateOperation: Instantiate[Operation] = Instantiate { operation =>
