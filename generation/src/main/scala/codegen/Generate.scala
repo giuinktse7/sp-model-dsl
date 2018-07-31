@@ -87,17 +87,18 @@ object Generate {
 
 
   def parseIdentifiableGraph(node: IdentifiableGraph, classPrefix: String = ""): Either[CaseClass, Identifiable] = {
-    println(node.name)
-    println(s"classPrefix: $classPrefix")
     if (node.nodes.isEmpty) Right(node.self)
     else {
+      val nextPrefix = if (classPrefix nonEmpty) classPrefix + node.name else node.name + "_"
       val result = node.nodes.map { n =>
-        parseIdentifiableGraph(n, s"${classPrefix}_${n.name}") match {
+        parseIdentifiableGraph(n, nextPrefix) match {
           case Left(caseClass) => caseClass.instance.asCaseVal(n.name)
-          case Right(identifiable) => NamespacedIdentifiable(classPrefix, identifiable).instance.asCaseVal(identifiable.name)
+          case Right(identifiable) => {
+            println(s"innermost with ${identifiable.name}")
+            NamespacedIdentifiable(classPrefix, identifiable).instance.asCaseVal(identifiable.name)
+          }
         }
       }
-
 
       val selfGen = node.self.generated.dependencies
       val caseVals = node.self.caseVals ++ result
@@ -188,19 +189,9 @@ object Generate {
       }
     }
 
-    def structCaseClass(struct: Struct): CaseClass = {
-      val caseVals = struct.caseVals ++ struct.items.map(identifiableGraphToCaseVal)
-      CaseClass(Utils.generateName("Struct", struct.name), caseVals:_*)
-    }
-
-    implicit val genStruct: Generate[Struct] = Generate.expression { struct =>
-      structCaseClass(struct).generated
-    }
-
     implicit val genIdentifiable: Generate[Identifiable] = Generate.expression {
       case x: Operation => x.generated
       case x: GenThing => x.generated
-      case x: Struct => x.generated
       case x => throw new IllegalArgumentException(s"There is no implicit Generate type class for $x.")
     }
 

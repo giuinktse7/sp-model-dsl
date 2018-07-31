@@ -30,11 +30,9 @@ object Instantiate {
   private def prefixName(prefix: String)(name: String): String = s"${prefix}_$name"
 
   implicit val instantiateNameSpacedIdentifiable: Instantiate[NamespacedIdentifiable] = Instantiate { id =>
-    val newName = prefixName(id.namespace)(id.name)
     val res: Identifiable = id.identifiable match {
-      case x: Operation => x.copy(name = newName)
-      case x: GenThing => x.copy(name = newName)
-      case x: Struct => x.copy(name = newName)
+      case x: Operation => x.copy(name = id.name)
+      case x: GenThing => x.copy(name = id.name)
       case x => throw new IllegalArgumentException(s"Can not find an Instantiate[_] in scope for $x.")
     }
 
@@ -43,6 +41,11 @@ object Instantiate {
 
   implicit val instantiateOperation: Instantiate[Operation] = Instantiate { operation =>
     Instance(operation.generated, "Operation")
+  }
+
+  def getCaseClassInstance(namespace: String): Instantiate[CaseClass] = Instantiate { caseClass =>
+    val res = Result(s"${caseClass.name}()", caseClass.dependencies + CaseClassDependency(caseClass))
+    Instance(res, caseClass.name)
   }
 
   implicit val caseClassInstance: Instantiate[CaseClass] = Instantiate { caseClass =>
@@ -60,15 +63,10 @@ object Instantiate {
     Generate.Implicits.genThingCaseClass(thing).instance
   }
 
-  implicit val instantiateStruct: Instantiate[Struct] = Instantiate { struct =>
-    Generate.Implicits.structCaseClass(struct).instance
-  }
-
   implicit val instantiateIdentifiable: Instantiate[Identifiable] = Instantiate { id =>
     id match {
       case x: Operation => x.instance
       case x: GenThing => x.instance
-      case x: Struct => x.instance
       case x => throw new IllegalArgumentException(s"Can not find an Instantiate[_] in scope for $x.")
     }
   }

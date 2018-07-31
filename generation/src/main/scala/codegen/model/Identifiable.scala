@@ -52,25 +52,6 @@ object GenThing {
   def apply(name: String, attrs: NamedAttrObject): GenThing = new GenThing(name, attrs)
 }
 
-case class StructNode(
-                       item: ID,
-                      parent: Option[ID] = None,
-                      nodeID: ID = ID(),
-                      attributes: AttributeMap = AttributeMap())
-
-case class Struct(
-                   name: String,
-                  items: Seq[IdentifiableGraph],
-                  attributes: AttributeMap = AttributeMap(),
-                  id: ID = ID()
-                 ) extends Identifiable {
-  // lazy val nodes: SimpleSet[ID, StructNode] = IdentifiableGraph.toNodes
-}
-
-object Struct {
-  def apply(name: String): Struct = new Struct(name)
-}
-
 case class OperationOrderSpecification(
                                         name: String,
                                        operationOrders: List[OperationOrder],

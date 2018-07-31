@@ -1,7 +1,7 @@
 package codegen
 
 import codegen.definition.CaseVal
-import codegen.model.{GenThing, Identifiable, Operation, Struct}
+import codegen.model.{GenThing, Identifiable, Operation}
 import Generate.GenOps
 import Generate.Implicits._
 
@@ -39,17 +39,8 @@ object CaseClassLike {
       )
     }
 
-    implicit val caseClassLikeStruct: CaseClassLike[Struct] = CaseClassLike { struct =>
-      List(
-        CaseVal("name", struct.name),
-        CaseVal("attributes", struct.attributes),
-        CaseVal("id", struct.id)
-      )
-    }
-
     implicit val caseClassLikeIdentifiable: CaseClassLike[Identifiable] = CaseClassLike {
       case o: Operation => o.caseVals
-      case s: Struct => s.caseVals
       case t: GenThing => t.caseVals
       case x => throw new IllegalArgumentException(s"Can not find a CaseClassLike[_] in scope for $x.")
     }

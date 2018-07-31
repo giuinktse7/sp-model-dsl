@@ -4,7 +4,10 @@ import codegen.Dependency
 
 case class CaseClass(name: String, outerDependencies: Set[Dependency], caseVals: Seq[CaseVal]) {
   val dependencies: Set[Dependency] = (caseVals.flatMap(_.dependencies) ++ outerDependencies).toSet
-  def prefixName(prefix: String): CaseClass = copy(name = s"${prefix}_$name")
+  def prefixName(prefix: String): CaseClass = {
+    if (prefix nonEmpty) copy(name = s"${prefix}_$name")
+    else this
+  }
 }
 
 object CaseClass {

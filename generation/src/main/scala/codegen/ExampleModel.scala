@@ -29,9 +29,8 @@ object ExampleModel {
       o2 has t2
     )
 
-    val struct = Struct("struct")(graph)
 
-    val model: List[Identifiable] = List(t1, t2, o1, o2, r1, sop, struct)
+    val model: List[Identifiable] = List(t1, t2, o1, o2, r1, sop)
 
     model
   }

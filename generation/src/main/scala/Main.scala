@@ -59,8 +59,7 @@ object Main {
       someOperation -> redThing
     )
 
-    val struct = Struct("struct")(items)
-    val model = Model("TestModel", struct)
+    val model = Model("TestModel", items)
 
     println(show(model.generated))
   }
