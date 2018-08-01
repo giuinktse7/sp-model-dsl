@@ -28,8 +28,8 @@ sealed trait Attribute {
 
         CaseVal.rawQualified(key, result, qualifier).addDependencies(deps)
       // case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${ID.validIdentifier(length = 5)}_GenFor_$key")
-      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${namespace}Generated_Attributes_$key")
-      case obj: NamedAttrObject => toCaseVal(key, obj, obj.values, namespace + obj.name)
+      case obj: AttrObject => toCaseVal(key, obj, obj.values, s"${namespace}_${key}_attributes")
+      case obj: NamedAttrObject => toCaseVal(key, obj, obj.values, namespace + obj.name + "_attributes")
     }
   }
 }
@@ -94,7 +94,7 @@ object Attribute {
   case class AttrObject(values: (String, Attribute)*) extends Attribute {
     def named(name: String): NamedAttrObject = NamedAttrObject(name, values:_*)
     // def nameByKey(key: String): NamedAttrObject = named(s"${ID.validIdentifier(length = 5)}_GenFor_$key")
-    def nameByKey(key: String): NamedAttrObject = named(s"Generated_Attributes_$key")
+    def nameByKey(key: String): NamedAttrObject = named(key)
 
     override def toSPValue: JsObject = JsObject(values.map { case (k, v) => k -> v.toSPValue })
   }

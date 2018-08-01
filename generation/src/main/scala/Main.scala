@@ -32,6 +32,7 @@ object Main {
     val model = Model("TestModel", items)
 
     println(show(model.generated))
+
   }
 
   def create(): Unit = {

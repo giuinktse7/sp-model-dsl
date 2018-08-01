@@ -85,15 +85,15 @@ object Generate {
     Stream.emits(gs).covary[F]
   }
 
-  def parseIdentifiableGraph(node: IdentifiableGraph, classPrefix: String = ""): Either[CaseClass, Identifiable] = {
+  def parseIdentifiableGraph(node: IdentifiableGraph, classPrefix: String = "Generated_"): Either[CaseClass, Identifiable] = {
     if (node.nodes.isEmpty) Right(node.self)
     else {
-      val nextPrefix = if (classPrefix nonEmpty) classPrefix + node.name else node.name + "_"
+      val nextPrefix = if (classPrefix nonEmpty) classPrefix + node.name + "_" else node.name + "_"
       val result = node.nodes.map { n =>
         parseIdentifiableGraph(n, nextPrefix) match {
           case Left(caseClass) => caseClass.localInstance.asCaseVal(n.name)
           case Right(identifiable) =>
-            println(s"innermost with ${identifiable.name}")
+            println(s"innermost with name: ${identifiable.name}, prefix: $nextPrefix")
             Namespace(identifiable, nextPrefix).instance.asCaseVal(identifiable.name)
         }
       }
@@ -101,7 +101,7 @@ object Generate {
       val selfGen = node.self.generated.dependencies
       val caseVals = Namespace(node.self, classPrefix).caseVals ++ result
 
-      Left(CaseClass.withDependencies(s"${classPrefix}_${node.className}", selfGen, caseVals:_*))
+      Left(CaseClass.withDependencies(classPrefix + node.className, selfGen, caseVals:_*))
     }
   }
 
@@ -132,6 +132,7 @@ object Generate {
 
     implicit val genCaseClass: Generate[CaseClass] = {
       Generate.obj { c =>
+        println(s"Class name: ${c.name}")
         val monocle = ImportDependency("monocle.macros.Lenses")
         val res = s"@Lenses case class ${c.name}(${c.caseVals.map(_.generated.result).mkString(", ")})"
 
@@ -149,7 +150,7 @@ object Generate {
 
     def genThingCaseClass(thing: Namespace[GenThing]): CaseClass = {
       val qualifiedName = thing.namespace + thing.value.name
-      CaseClass(Utils.generateName("Thing", qualifiedName), thing.caseVals:_*)
+      CaseClass(qualifiedName, thing.caseVals:_*)
     }
 
     implicit val genThing: Generate[GenThing] = Generate.expression { thing =>

@@ -15,10 +15,9 @@ case class IdentifiableGraph(self: Identifiable, className: String, nodes: Simpl
 
 
 object IdentifiableGraph {
-  private def defaultClassName(name: String): String = Utils.generateName("Class", name)
-  implicit class IdentifiableToNodeGraph[A <: Identifiable](override val self: A) extends IdentifiableGraph(self, defaultClassName(self.name), SimpleSet(_.self.id))
+  implicit class IdentifiableToNodeGraph[A <: Identifiable](override val self: A) extends IdentifiableGraph(self, self.name, SimpleSet(_.self.id))
 
   def apply(self: Identifiable, nodes: SimpleSet[ID, IdentifiableGraph] = SimpleSet(_.self.id)): IdentifiableGraph = {
-    new IdentifiableGraph(self, defaultClassName(self.name), nodes)
+    new IdentifiableGraph(self, self.name, nodes)
   }
 }
