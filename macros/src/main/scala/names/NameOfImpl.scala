@@ -1,12 +1,14 @@
-import scala.annotation.tailrec
-import scala.reflect.macros._
+package names
 
+import scala.annotation.tailrec
+import scala.reflect.macros.blackbox
+import scala.reflect.runtime.universe._
 
 /**
   * Taken from https://github.com/dwickern/scala-nameof/
   * 08/01/2018
   */
-object NameOfImpl {
+private object NameOfImpl {
   def nameOf(c: blackbox.Context)(expr: c.Expr[Any]): c.Tree = {
     import c.universe._
 
@@ -21,6 +23,10 @@ object NameOfImpl {
     }
 
     q"${extract(expr.tree).decodedName.toString}"
+  }
+
+  def changeNameTest[T](c: blackbox.Context)(expr: c.Expr[NameChangeable[T]]): c.Expr[NameChangeable[T]] = {
+    expr
   }
 
   def nameOfType[T](c: blackbox.Context)(implicit tag: c.WeakTypeTag[T]): c.Expr[String] = {

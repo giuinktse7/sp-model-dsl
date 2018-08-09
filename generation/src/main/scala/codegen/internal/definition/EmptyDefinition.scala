@@ -1,4 +1,4 @@
-package codegen.definition
+package codegen.internal.definition
 
 trait EmptyDefinition
 

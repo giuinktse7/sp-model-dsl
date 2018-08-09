@@ -1,6 +1,6 @@
 package codegen
 
-import codegen.definition.CaseClass
+import codegen.internal.definition.CaseClass
 import utest._
 
 object GenerateTest extends TestSuite {

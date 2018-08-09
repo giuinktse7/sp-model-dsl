@@ -1,12 +1,14 @@
 package codegen.model
 
 import Types.{AttributeMap, _}
-import codegen.Attribute.{AttrObject, NamedAttrObject}
+import codegen.internal.Attribute
+import codegen.internal.Attribute.{AttrObject, NamedAttrObject}
+import play.api.libs.json.{JsObject, Json}
 
 sealed trait Identifiable extends Equals {
   val name: String
   val id: ID
-  val attributes: AttributeMap
+  val spAttributes: AttributeMap
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[Identifiable]
   override def equals(other: Any): Boolean = other match {
@@ -18,19 +20,19 @@ sealed trait Identifiable extends Equals {
 case class NamespacedIdentifiable(namespace: String, identifiable: Identifiable) extends Identifiable {
   override val name: String = s"${namespace}_${identifiable.name}"
   override val id: ID = identifiable.id
-  override val attributes: AttributeMap = identifiable.attributes
+  override val spAttributes: AttributeMap = identifiable.spAttributes
 }
 
-case class Operation(
+case class Operation[R](
                       name: String,
-                      conditions: List[Conditional] = List(),
-                      attributes: AttributeMap = AttributeMap(),
+                      conditions: List[Conditional[R]] = List(),
+                      spAttributes: AttributeMap = AttributeMap(),
                       id: ID = ID()
                     ) extends Identifiable
 
 case class Thing(
                   name: String,
-                  attributes: AttributeMap,
+                  spAttributes: AttributeMap,
                   id: ID = ID()
                 ) extends Identifiable
 
@@ -39,12 +41,23 @@ object Thing {
   def forGen(name: String, attributes: NamedAttrObject): GenThing = GenThing(name, attributes)
 }
 
-case class GenThing(name: String, attrObject: NamedAttrObject, id: ID = ID()) extends Identifiable {
+case class GenThing(name: String, attributes: Attribute, id: ID = ID()) extends Identifiable {
+
   def this(name: String, obj: AttrObject) {
-    this(name, obj.nameByKey(name))
+    this(name, obj.nameByKey(name).asInstanceOf[Attribute])
   }
 
-  override val attributes: AttributeMap = attrObject.toSPValue
+  override val spAttributes: AttributeMap = attributes.toSPValue match {
+    case x: AttributeMap => x
+    case x => Json.obj(Attribute.ValuePrefix -> x)
+  }
+
+  // TODO Use proper error handling instead of defaulting to entire object
+  def domain: Attribute = attributes match {
+    case o@NamedAttrObject(_, _) => o.get(Attribute.DomainKey).getOrElse(o)
+    case o@AttrObject(_) => o.get(Attribute.DomainKey).getOrElse(o)
+    case x => x
+  }
 }
 
 object GenThing {
@@ -54,7 +67,7 @@ object GenThing {
 
 case class OperationOrderSpecification(
                                         name: String,
-                                       operationOrders: List[OperationOrder],
-                                       attributes: AttributeMap = AttributeMap(),
-                                       id: ID = ID()
+                                        operationOrders: List[OperationOrder],
+                                        spAttributes: AttributeMap = AttributeMap(),
+                                        id: ID = ID()
                                       ) extends Identifiable

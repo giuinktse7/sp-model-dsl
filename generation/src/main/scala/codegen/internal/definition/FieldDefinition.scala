@@ -1,4 +1,4 @@
-package codegen.definition
+package codegen.internal.definition
 
 case class FieldDefinition(name: String, className: String)
 

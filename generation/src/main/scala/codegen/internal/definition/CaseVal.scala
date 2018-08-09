@@ -1,7 +1,7 @@
-package codegen.definition
+package codegen.internal.definition
 
-import codegen.{Dependency, Generate}
-import codegen.Generate._
+import codegen.internal.{Dependency, Generate}
+import Generate.GenOps
 
 case class CaseVal(name: String, className: String, value: String, dependencies: Set[Dependency] = Set()) {
   def addDependencies(dependencies: Set[Dependency]): CaseVal = copy(dependencies = this.dependencies ++ dependencies)

@@ -7,18 +7,19 @@ object Dependencies {
   lazy val paradiseVersion = "2.1.0"
 
   lazy val commonDependencies = Seq(
-    "com.lihaoyi" %% "utest" % "0.6.3" % "test"
+    "com.lihaoyi" %% "utest" % "0.6.3" % "test",
+    "org.scala-lang" % "scala-reflect" % "2.12.3"
   )
 
   lazy val rootDependencies = libraryDependencies ++= Seq(
-      "com.github.julien-truffaut" %%  "monocle-core"  % monocleVersion,
-      "com.github.julien-truffaut" %%  "monocle-macro" % monocleVersion,
-      "com.github.julien-truffaut" %%  "monocle-law"   % monocleVersion % "test",
+    "com.github.julien-truffaut" %%  "monocle-core"  % monocleVersion,
+    "com.github.julien-truffaut" %%  "monocle-macro" % monocleVersion,
+    "com.github.julien-truffaut" %%  "monocle-law"   % monocleVersion % "test",
 
-      "co.fs2" %% "fs2-core" % "0.10.1",
-      "co.fs2" %% "fs2-io" % "0.10.1",
+    "co.fs2" %% "fs2-core" % "0.10.1",
+    "co.fs2" %% "fs2-io" % "0.10.1",
 
-      "com.typesafe.play" %% "play-json" % "2.6.0",
-      "com.geirsson" %% "scalafmt-core" % "1.6.0-RC3"
-    )
+    "com.typesafe.play" %% "play-json" % "2.6.0",
+    "com.geirsson" %% "scalafmt-core" % "1.6.0-RC3"
+  )
 }

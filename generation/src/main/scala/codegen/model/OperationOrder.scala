@@ -1,6 +1,7 @@
 package codegen.model
 
 import Types._
+import codegen.internal.Result
 
 /**
   * SOP (Sequence of Operation)
@@ -16,12 +17,12 @@ case class Arbitrary(operationOrders: List[OperationOrder]) extends OperationOrd
 case class Sequential(operationOrders: List[OperationOrder]) extends OperationOrder
 case class SometimeSequence(operationOrders: List[OperationOrder]) extends OperationOrder
 case class Other(operationOrders: List[OperationOrder]) extends OperationOrder
-case class OperationNode(operation: ID, conditions: List[Conditional] = List(), operationOrders: List[OperationOrder] = List()) extends OperationOrder
+case class OperationNode(operation: ID, conditions: List[Conditional[Result]] = List(), operationOrders: List[OperationOrder] = List()) extends OperationOrder
 
 object OperationNode {
   def apply(id: ID): OperationNode = OperationNode(id, List())
 
-  implicit def operationToNode(operation: Operation): OperationNode = apply(operation.id)
+  implicit def operationToNode(operation: Operation[Result]): OperationNode = apply(operation.id)
 }
 
 
@@ -45,8 +46,8 @@ object OperationOrder {
     case _ => Parallel(children)
   }
 
-  def apply(op: Operation) = OperationNode(op.id)
-  def apply(op: Operation, children: OperationOrder) = OperationNode(op.id, List(), List(children))
+  def apply(op: Operation[Result]) = OperationNode(op.id)
+  def apply(op: Operation[Result], children: OperationOrder) = OperationNode(op.id, List(), List(children))
   def apply(op: ID) = OperationNode(op)
 
 

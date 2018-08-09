@@ -1,6 +1,7 @@
-package codegen.definition
+package codegen.internal.definition
 
-import codegen.Dependency
+import codegen.internal.Dependency
+
 
 case class CaseClass(name: String, outerDependencies: Set[Dependency], caseVals: Seq[CaseVal]) {
   val dependencies: Set[Dependency] = (caseVals.flatMap(_.dependencies) ++ outerDependencies).toSet

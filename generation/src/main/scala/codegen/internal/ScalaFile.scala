@@ -1,4 +1,4 @@
-package codegen
+package codegen.internal
 
 import java.nio.file.{Path, Paths}
 

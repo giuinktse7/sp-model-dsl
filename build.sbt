@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 
 
 lazy val macros = (project in file("macros"))
-  .settings(commonSettings ++ Seq(libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.12.3"))
+  .settings(commonSettings)
 
 
 lazy val generation = (project in file("generation"))

@@ -1,9 +1,10 @@
-package codegen
+package codegen.internal
 
 import codegen.model._
-import Generate.GenOps
-import codegen.definition.{CaseClass, CaseVal}
+import codegen.internal.definition.{CaseClass, CaseVal}
 import Generate.Implicits._
+import Generate.GenOps
+import codegen.Utils.BindGenericParam
 
 sealed trait Instantiate[A] {
   protected def toInstance: Namespace[A] => Instance
@@ -34,12 +35,15 @@ object Instantiate {
   }
 
   implicit class InstanceOps[A](val value: A) extends AnyVal {
+    /**
+      * Does not care about the Namespace value when performing instantiation.
+      */
     def localInstance(implicit in: Instantiate[A]): Instance = in.instance(Namespace(value))
   }
 
   private def prefixName(prefix: String)(name: String): String = s"${prefix}_$name"
 
-  implicit val instantiateOperation: Instantiate[Operation] = local { operation =>
+  implicit val instantiateOperation: Instantiate[Operation[Result]] = local { operation =>
     Instance(operation.generated, "Operation")
   }
 
@@ -48,7 +52,7 @@ object Instantiate {
     Instance(res, caseClass.name)
   }
 
-  implicit val conditionalInstance: Instantiate[Conditional] = local { conditional =>
+  implicit val conditionalInstance: Instantiate[Conditional[Result]] = local { conditional =>
     Instance(conditional.generated, "Conditional")
   }
 
@@ -59,7 +63,7 @@ object Instantiate {
   implicit val instantiateIdentifiable: Instantiate[Identifiable] = Instantiate { namespace =>
     val Namespace(value, space) = namespace
     value match {
-      case x: Operation => Namespace(x, space).instance
+      case x: Operation[_] => Namespace(x.withKind[Result], space).instance
       case x: GenThing => Namespace(x, space).instance
       case x => throw new IllegalArgumentException(s"Can not find an Instantiate[_] in scope for $x.")
     }

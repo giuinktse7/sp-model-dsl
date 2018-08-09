@@ -1,104 +1,131 @@
 package codegen.model
 
-import codegen.Attribute.AttrObject
-import codegen.{Generate, Result}
-import codegen.Generate._
+import cats.Eq
+import codegen.internal.Attribute.AttrObject
+import codegen.internal.{Attribute, Effect}
+import codegen.model.Bool._
+import codegen.model.ConditionNode._
+import play.api.libs.json.{JsArray, JsNumber, JsObject, JsString}
 
-case class Conditional(
-                        proposition: Seq[ConditionNode],
+case class Conditional[R](
+                        proposition: Seq[ConditionNode[R]],
                         actions: List[Int] = List(), // TODO Change Int to Action
                         config: AttrObject = AttrObject()
-                      )
+                      )(implicit F: Effect[R, Conditional]) {
+  def useEffect: R = F.effect(this)
+}
 
-object Conditional {
-  def apply(nodes: ConditionNode*): Conditional = new Conditional(nodes, List(), AttrObject())
-  def apply(nodes: Seq[ConditionNode], actions: List[Int], config: AttrObject): Conditional = {
+trait ConditionShape[A, B] {
+  def toConditionShape(a: A): B
+}
+
+
+trait ConditionalImplicits {
+  implicit val eqInt: Eq[Int] = Eq.fromUniversalEquals
+  implicit val eqString: Eq[String] = Eq.fromUniversalEquals
+  implicit val eqJsString: Eq[JsString] = Eq.fromUniversalEquals
+  implicit val eqJsNumber: Eq[JsNumber] = Eq.fromUniversalEquals
+  implicit val eqJsArray: Eq[JsArray] = Eq.fromUniversalEquals
+  implicit val eqJsObject: Eq[JsObject] = Eq.fromUniversalEquals
+  implicit val eqAttr: Eq[Attribute] = Eq.fromUniversalEquals
+  implicit val eqAttrObj: Eq[AttrObject] = Eq.fromUniversalEquals
+  implicit def eqIndexedSeq[A <: IndexedSeq[_]]: Eq[A] = (x: A, y: A) => x.equals(y)
+  implicit def eqSeq[A <: Seq[_]]: Eq[A] = (x: A, y: A) => x.equals(y)
+}
+
+object Conditional extends ConditionalImplicits {
+  type Cond = Conditional[Unit]
+
+  def apply[R](nodes: ConditionNode[R]*)(implicit F: Effect[R, Conditional]): Conditional[R] = new Conditional(nodes, List(), AttrObject())
+  def apply[R](nodes: Seq[ConditionNode[R]], actions: List[Int], config: AttrObject)(implicit F: Effect[R, Conditional]): Conditional[R] = {
     new Conditional(nodes, actions, config)
   }
-}
 
-object Test {
+  object DSL extends ConditionalImplicits {
+    implicit class DomainDSL[A, C, R](a: A)(implicit shapeA: ConditionShape[A, C], eqC: Eq[C], F: Effect[R, Bool]) {
 
-  implicit class ConditionalDSL[A: Generate](a: A) {
-    def ===(that: A): Bool = Equal(a, that)
-    def !==(that: A): Bool = Not(Equal(a, that))
+      def ===[B: Eq](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C]): Bool[R] = {
+        Equal(shapeA.toConditionShape(a), shapeB.toConditionShape(b))
+      }
+      def !==[B: Eq](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C], F2: Effect[R, Not]): Bool[R] = {
+        Not(Equal(shapeA.toConditionShape(a), shapeB.toConditionShape(b)))
+      }
+    }
 
-    // TODO
-    def :=(that: A): Definition[A] = ???
+    implicit class ConditionalDSL[A, B, R](a: A)(implicit F: Effect[R, Bool]) {
+      def :=(that: B)(implicit F: Effect.Partial2[R, Definition, A, B]): Definition[A, B, R] = Definition(a, that)
+    }
   }
+
+
+
 }
 
-sealed trait Bool extends ConditionNode {
-  def &&(node: Bool): Bool = And(this, node)
-  def V(node: Bool): Bool = Or(this, node)
-  def Λ(node: Bool): Bool = And(this, node)
+sealed trait Bool[R] extends ConditionNode[R] {
+  def ||(node: Bool[R])(implicit F: Effect[R, Or]): Bool[R] = Or(this, node)
+  def &&(node: Bool[R])(implicit F: Effect[R, And]): Bool[R] = And(this, node)
+
+  def V(node: Bool[R])(implicit F: Effect[R, Or]): Bool[R] = Or(this, node)
+  def Λ(node: Bool[R])(implicit F: Effect[R, And]): Bool[R] = And(this, node)
+
+  def eval: Boolean
+  def effect: R
 }
 
 object Bool {
-  def ¬(node: Bool): Bool = Not(node)
+  def not[R](node: Bool[R])(implicit F: Effect[R, Not]): Bool[R] = Not(node)
+  def ¬[R](node: Bool[R])(implicit F: Effect[R, Not]): Bool[R] = Not(node)
+
+
+  case class And[R](fst: Bool[R], snd: Bool[R])(implicit F: Effect[R, And]) extends Bool[R] {
+    def effect: R = F.effect(this)
+    override def eval = fst.eval && snd.eval
+  }
+
+  case class Or[R](fst: Bool[R], snd: Bool[R])(implicit F: Effect[R, Or]) extends Bool[R] {
+    override def eval = fst.eval || snd.eval
+
+    override def effect = F.effect(this)
+  }
+
+  case class True[R]()(implicit F: Effect[R, True]) extends Bool[R] {
+    override def eval = true
+
+    override def effect: R = F.effect(this)
+  }
+  case class False[R]()(implicit F: Effect[R, False]) extends Bool[R] {
+    override def eval = false
+
+    override def effect: R = F.effect(this)
+  }
+
+  case class Equal[A: Eq, R](lhs: A, rhs: A)(implicit F: Effect.Partial[R, Equal, A]) extends Bool[R] {
+    override def eval = Eq.eqv(lhs, rhs)
+
+    override def effect = F.effect(this)
+  }
+
+  case class Not[R](bool: Bool[R])(implicit F: Effect[R, Not]) extends Bool[R] {
+    override def eval = !bool.eval
+
+    override def effect = F.effect(this)
+  }
 }
 
-sealed trait ConditionNode {
-  def gen: Result
+sealed trait ConditionNode[R] {
+  def effect: R
 }
-
 object ConditionNode {
-  def point[A: Generate](a: A): Value[A] = Value(a)
-}
+  def point[A: Eq, R](a: A)(implicit F: Effect.Partial[R, Value, A]): Value[A, R] = Value(a)
 
-case class Value[A: Generate](a: A) extends ConditionNode {
-  def gen: Result = {
-    val generated = a.generated
-    generated.copy(result = s"Value(${generated.result})")
+  case class Definition[A, B, R](lhs: A, rhs: B)(implicit F: Effect.Partial2[R, Definition, A, B]) extends ConditionNode[R] {
+    override def effect = F.effect(this)
   }
 
-  def ^==(that: A): Bool = Equal(a, that)
-  def ^!=(that: A): Bool = Not(Equal(a, that))
-}
+  case class Value[A: Eq, R](a: A)(implicit F: Effect.Partial[R, Value, A]) extends ConditionNode[R] {
+    def ^==(that: A)(implicit F: Effect.Partial[R, Equal, A]): Bool[R] = Equal(a, that)
+    def ^!=(that: A)(implicit F1: Effect.Partial[R, Equal, A], F2: Effect[R, Not]): Bool[R] = Not(Equal(a, that))
 
-case class Definition[A: Generate](a: A) extends ConditionNode {
-  def gen: Result = {
-    val generated = a.generated
-    generated.copy(result = s"Definition(${generated.result})")
-  }
-}
-
-case class And(fst: Bool, snd: Bool) extends Bool {
-  override def gen: Result = {
-    val (resA, depA) = fst.gen.tupled
-    val (resB, depB) = snd.gen.tupled
-
-    Result(s"Or($resA, $resB)", depA ++ depB)
-  }
-}
-
-case class Or(fst: Bool, snd: Bool) extends Bool {
-  override def gen: Result = {
-    val (resA, depA) = fst.gen.tupled
-    val (resB, depB) = snd.gen.tupled
-
-    Result(s"Or($resA, $resB)", depA ++ depB)
-  }
-}
-
-case object True extends Bool {
-  override def gen: Result = Result("True")
-}
-case object False extends Bool {
-  override def gen: Result = Result("False")
-}
-
-case class Equal[A: Generate](fst: A, snd: A) extends Bool {
-  override def gen: Result = {
-    val (resA, depA) = fst.generated.tupled
-    val (resB, depB) = snd.generated.tupled
-
-    Result(s"Equal($resA, $resB)", depA ++ depB)
-  }
-}
-case class Not(bool: Bool) extends Bool {
-  override def gen: Result = {
-    val (res, deps) = bool.gen.tupled
-    Result(s"Not($res)", deps)
+    override def effect = F.effect(this)
   }
 }

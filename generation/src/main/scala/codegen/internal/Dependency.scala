@@ -1,9 +1,8 @@
-package codegen
+package codegen.internal
 
-import codegen.definition.CaseClass
-import Generate.GenOps
-import Generate.Implicits.genCaseClass
-
+import codegen.internal.definition.CaseClass
+import codegen.internal.Generate.GenOps
+import codegen.internal.Generate.Implicits.genCaseClass
 
 
 sealed trait Dependency {
