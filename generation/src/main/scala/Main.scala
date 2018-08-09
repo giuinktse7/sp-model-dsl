@@ -1,13 +1,17 @@
 
 
+import java.util.UUID
+
 import codegen.model._
 import IdentifiableGraph.IdentifiableToNodeGraph
 import codegen.internal.{Attribute, Generate, Result}
 import codegen.internal.Attribute._
 import Generate.Implicits._
-import Conditional.DSL._
 import codegen.internal.Transform._
 import Generate.GenOps
+import codegen.internal.Effect.Partial3
+import codegen.model.Bool.{IdentifiableGuard, Equal, Testable}
+import play.api.libs.json.Json
 
 object Main {
   implicit val genThingShape: ConditionShape[GenThing, Attribute] = _.domain
@@ -34,7 +38,8 @@ object Main {
     println(show(model.generated))*/
 
     // conditionals()
-    create()
+    //create()
+    exper()
   }
 
   def show(result: Result): String = {
@@ -54,9 +59,24 @@ object Main {
   }
 */
 
+  def exper(): Unit = {
+    import codegen.internal.Effect.Implicits._
+    import codegen.model.Bool.IdentifiableGuard.mkOrderingOps
+
+    val thing = Thing("thing", Json.obj("domain" -> true))
+
+
+    val state = Map(thing.id -> Json.obj("domain" -> false))
+
+
+    val association = thing === thing.attributes
+    println(association.test(thing => state(thing.id)))
+  }
+
   def create(): Unit = {
+    import Conditional.DSL._
     import codegen.internal.Effect.Implicits.ForGen._
-    // import Effect.Implicits._
+    // import codegen.internal.Effect.Implicits._
 
     val r1 = Thing.forGen("r1", Attribute("domain"-> List("foo", "bar")))
     val t1 = Thing.forGen("t1", Attribute("domain"-> List(true, false)))

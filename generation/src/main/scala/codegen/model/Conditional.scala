@@ -7,6 +7,8 @@ import codegen.model.Bool._
 import codegen.model.ConditionNode._
 import play.api.libs.json.{JsArray, JsNumber, JsObject, JsString}
 
+import scala.util.Try
+
 case class Conditional[R](
                         proposition: Seq[ConditionNode[R]],
                         actions: List[Int] = List(), // TODO Change Int to Action
@@ -33,6 +35,8 @@ trait ConditionalImplicits {
   implicit def eqSeq[A <: Seq[_]]: Eq[A] = (x: A, y: A) => x.equals(y)
 }
 
+object EqImplicits extends ConditionalImplicits
+
 object Conditional extends ConditionalImplicits {
   type Cond = Conditional[Unit]
 
@@ -42,6 +46,8 @@ object Conditional extends ConditionalImplicits {
   }
 
   object DSL extends ConditionalImplicits {
+    // implicit class IdentifiableDSL[]
+
     implicit class DomainDSL[A, C, R](a: A)(implicit shapeA: ConditionShape[A, C], eqC: Eq[C], F: Effect[R, Bool]) {
 
       def ===[B: Eq](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C]): Bool[R] = {
@@ -56,8 +62,6 @@ object Conditional extends ConditionalImplicits {
       def :=(that: B)(implicit F: Effect.Partial2[R, Definition, A, B]): Definition[A, B, R] = Definition(a, that)
     }
   }
-
-
 
 }
 
@@ -99,11 +103,51 @@ object Bool {
     override def effect: R = F.effect(this)
   }
 
-  case class Equal[A: Eq, R](lhs: A, rhs: A)(implicit F: Effect.Partial[R, Equal, A]) extends Bool[R] {
+  case class Equal[A: Eq, R](lhs: A, rhs: A)(implicit F: Effect.Partial[R, Equal, A]) extends Bool[R] with Testable[A] {
     override def eval = Eq.eqv(lhs, rhs)
 
     override def effect = F.effect(this)
+
+    override def test(a1: A, a2: A) = a1 == a2
   }
+
+  trait Testable[A] {
+    def test(a1: A, a2: A): Boolean
+
+  }
+
+  object Testable {
+    def any(f: (Any, Any) => Boolean): Testable[Any] = of[Any](f)
+    def of[A](f: (A, A) => Boolean): Testable[A] = f.apply
+
+    def eq[A] = Testable.of[A](_ == _)
+    def gt[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.gt(a, b))
+    def lt[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.lt(a, b))
+    def gteq[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.gteq(a, b))
+    def lteq[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.lteq(a, b))
+  }
+
+
+
+  case class IdentifiableGuard[B, R](a: Identifiable, b: B, T: Testable[B])(implicit F: Effect.Partial[R, IdentifiableGuard, B]) extends ConditionNode[R] {
+    def test(f: Identifiable => Any): Boolean = Try(T.test(f(a).asInstanceOf[B], b)).getOrElse(false)
+
+    override def effect = F.effect(this)
+  }
+
+  object IdentifiableGuard {
+    class Ops(lhs: Identifiable) {
+      def <[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.lt[B])
+      def <=[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.lteq[B])
+      def >[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.gt[B])
+      def >=[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.gteq[B])
+      def ===[B, R](rhs: B)(implicit F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.eq[B])
+    }
+
+    implicit def mkOrderingOps(lhs: Identifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(lhs)
+  }
+
+
 
   case class Not[R](bool: Bool[R])(implicit F: Effect[R, Not]) extends Bool[R] {
     override def eval = !bool.eval
