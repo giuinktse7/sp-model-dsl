@@ -1,6 +1,6 @@
 package codegen.internal
 
-import codegen.internal.Attribute._
+import codegen.internal.Attribute.{AttrDouble, _}
 import codegen.internal.definition.{CaseClass, CaseVal}
 import codegen.model.Types.SPValue
 import play.api.libs.json._
@@ -21,8 +21,11 @@ sealed trait Attribute {
     this match {
       case AttrString(str) => CaseVal(key, str)
       case AttrBoolean(bool) => CaseVal(key, bool)
+      case AttrInt(n) => CaseVal(key, n)
+      case AttrDouble(n) => CaseVal(key, n)
+      case AttrLong(n) => CaseVal(key, n)
       case AttrNumber(n) => CaseVal(key, n)
-      case AttrList(values) => throw new NotImplementedException
+      case AttrList(_) => throw new NotImplementedException
 
       case AttrListForGen(_, generatedValues, qualifier) =>
         val gen = Result.foldSeq(generatedValues)
@@ -78,10 +81,10 @@ object Attribute {
   def valueToAttribute(v: Any): Attribute = v match {
     case v: String => AttrString(v)
     case v: BigDecimal => AttrNumber(v)
-    case v: Int => AttrNumber(BigDecimal(v))
-    case v: Double => AttrNumber(BigDecimal(v))
+    case v: Int => AttrInt(v)
+    case v: Double => AttrDouble(v)
     case v: Float => AttrNumber(BigDecimal(v))
-    case v: Long => AttrNumber(BigDecimal(v))
+    case v: Long => AttrLong(v)
     case v: Boolean => AttrBoolean(v)
     case v: Seq[Any] => AttrList(v.map(valueToAttribute).toIndexedSeq)
     case v: Attribute => v
@@ -98,10 +101,22 @@ object Attribute {
     override def toSPValue: SPValue = JsString(value)
   }
 
-  // TODO Should perhaps not always use BigDecimal
+  case class AttrInt(value: Int) extends Attribute {
+    override def toSPValue: SPValue = JsNumber(value)
+  }
+
+  case class AttrDouble(value: Double) extends Attribute {
+    override def toSPValue: SPValue = JsNumber(value)
+  }
+
+  case class AttrLong(value: Long) extends Attribute {
+    override def toSPValue: SPValue = JsNumber(value)
+  }
+
   case class AttrNumber(value: BigDecimal) extends Attribute {
     override def toSPValue: SPValue = JsNumber(value)
   }
+
   case class AttrBoolean(value: Boolean) extends Attribute {
     override def toSPValue: SPValue = JsBoolean(value)
   }

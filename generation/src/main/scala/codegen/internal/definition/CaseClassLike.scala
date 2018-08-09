@@ -29,7 +29,6 @@ object CaseClassLike {
         CaseVal("attributes", op.spAttributes),
         CaseVal("id", op.id)
       )
-
     }
 
     implicit val caseClassLikeGenThing: CaseClassLike[GenThing] = CaseClassLike { ns =>

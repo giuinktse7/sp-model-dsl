@@ -3,11 +3,17 @@ package codegen.internal.definition
 import codegen.internal.Dependency
 
 
-case class CaseClass(name: String, outerDependencies: Set[Dependency], caseVals: Seq[CaseVal]) {
+case class CaseClass(name: String, outerDependencies: Set[Dependency], caseVals: Seq[CaseVal], extending: List[String] = List()) {
   val dependencies: Set[Dependency] = (caseVals.flatMap(_.dependencies) ++ outerDependencies).toSet
   def prefixName(prefix: String): CaseClass = {
-    if (prefix nonEmpty) copy(name = s"${prefix}_$name")
+    if (prefix.nonEmpty) copy(name = s"${prefix}_$name")
     else this
+  }
+
+  def genExtends: String = extending.distinct match {
+    case Nil => ""
+    case h :: Nil => s"extends $h"
+    case h :: t => s"extends $h${t.foldLeft("")((a, b) => s"$a with $b")}"
   }
 }
 

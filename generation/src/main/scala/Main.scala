@@ -1,21 +1,18 @@
 
 
-import java.util.UUID
-
 import codegen.model._
 import IdentifiableGraph.IdentifiableToNodeGraph
 import codegen.internal.{Attribute, Generate, Result}
 import codegen.internal.Attribute._
 import Generate.Implicits._
-import codegen.internal.Transform._
 import Generate.GenOps
-import codegen.internal.Effect.Partial3
-import codegen.model.Bool.{IdentifiableGuard, Equal, Testable}
+import codegen.ExampleModel
+import codegen.ExampleModel.TestModel
 import play.api.libs.json.Json
 
 object Main {
   implicit val genThingShape: ConditionShape[GenThing, Attribute] = _.domain
-  implicit val intShape: ConditionShape[Int, Attribute] = AttrNumber(_)
+  implicit val intShape: ConditionShape[Int, Attribute] = AttrInt(_)
   implicit val stringShape: ConditionShape[String, Attribute] = AttrString(_)
   implicit def attrShape[A <: Attribute]: ConditionShape[A, Attribute] = x => x
 
@@ -38,7 +35,7 @@ object Main {
     println(show(model.generated))*/
 
     // conditionals()
-    //create()
+    // create()
     exper()
   }
 
@@ -63,14 +60,14 @@ object Main {
     import codegen.internal.Effect.Implicits._
     import codegen.model.Bool.IdentifiableGuard.mkOrderingOps
 
-    val thing = Thing("thing", Json.obj("domain" -> true))
+    val m = TestModel()
 
 
-    val state = Map(thing.id -> Json.obj("domain" -> false))
 
+    val state = Map(m.r1.o1.t1.id -> 5)
 
-    val association = thing === thing.attributes
-    println(association.test(thing => state(thing.id)))
+    val guard = m.r1.o1.t1 <= m.r1.o1.t1.attributes.domain
+    println(guard.test(id => state(id)))
   }
 
   def create(): Unit = {
@@ -79,7 +76,7 @@ object Main {
     // import codegen.internal.Effect.Implicits._
 
     val r1 = Thing.forGen("r1", Attribute("domain"-> List("foo", "bar")))
-    val t1 = Thing.forGen("t1", Attribute("domain"-> List(true, false)))
+    val t1 = Thing.forGen("t1", Attribute("domain"-> 15))
 
 
     val conditionForO1 = Conditional((5 === 2) && ("foo" === "bar"))

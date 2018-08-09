@@ -1,8 +1,10 @@
 package codegen.model
 
+import java.util.UUID
+
 import cats.Eq
 import codegen.internal.Attribute.AttrObject
-import codegen.internal.{Attribute, Effect}
+import codegen.internal.{Attribute, Effect, GeneratedIdentifiable}
 import codegen.model.Bool._
 import codegen.model.ConditionNode._
 import play.api.libs.json.{JsArray, JsNumber, JsObject, JsString}
@@ -103,17 +105,23 @@ object Bool {
     override def effect: R = F.effect(this)
   }
 
-  case class Equal[A: Eq, R](lhs: A, rhs: A)(implicit F: Effect.Partial[R, Equal, A]) extends Bool[R] with Testable[A] {
+  case class Equal[A: Eq, R](lhs: A, rhs: A)(implicit F: Effect.Partial[R, Equal, A]) extends Bool[R] {
     override def eval = Eq.eqv(lhs, rhs)
-
     override def effect = F.effect(this)
-
-    override def test(a1: A, a2: A) = a1 == a2
   }
+/*
+  trait Compare[A, B] {
+    def compare(a: A, b: B): Int
 
+    def eq(a: A, b: B) = a == b
+    def gt(a: A, b: B) = a < b
+    def lt[A](a: A, b: B) =
+    def gteq[A](a: A, b: B) =
+    def lteq[A](a: A, b: B) =
+  }
+*/
   trait Testable[A] {
     def test(a1: A, a2: A): Boolean
-
   }
 
   object Testable {
@@ -127,16 +135,36 @@ object Bool {
     def lteq[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.lteq(a, b))
   }
 
+  sealed trait Identified {
+    def id: UUID
+  }
+  case class GenGuardId(obj: GeneratedIdentifiable) extends Identified { val id = obj.id }
+  case class GuardId(obj: Identifiable) extends Identified { val id = obj.id }
 
+  case class IdentifiableGuard[B, R](a: Identified, b: B, T: Testable[B])(implicit F: Effect.Partial[R, IdentifiableGuard, B]) extends ConditionNode[R] {
+    def test(f: UUID => Any): Boolean = {
+      val temp = f(a.id)
+      val result = b match {
+        case _: BigDecimal =>
+           temp match {
+            case x: Int => BigDecimal(x).asInstanceOf[B]
+            case x: java.lang.Integer => BigDecimal(x).asInstanceOf[B]
+            case x: Float => BigDecimal(x).asInstanceOf[B]
+            case x: Double => BigDecimal(x).asInstanceOf[B]
+            case x:  Long => BigDecimal(x).asInstanceOf[B]
+            case _ => temp.asInstanceOf[B]
+          }
+        case _ => temp.asInstanceOf[B]
+      }
 
-  case class IdentifiableGuard[B, R](a: Identifiable, b: B, T: Testable[B])(implicit F: Effect.Partial[R, IdentifiableGuard, B]) extends ConditionNode[R] {
-    def test(f: Identifiable => Any): Boolean = Try(T.test(f(a).asInstanceOf[B], b)).getOrElse(false)
+      T.test(result, b)
+    }
 
     override def effect = F.effect(this)
   }
 
   object IdentifiableGuard {
-    class Ops(lhs: Identifiable) {
+    class Ops(lhs: Identified) {
       def <[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.lt[B])
       def <=[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.lteq[B])
       def >[B, R](rhs: B)(implicit cmp: Ordering[_ >: B], F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.gt[B])
@@ -144,14 +172,12 @@ object Bool {
       def ===[B, R](rhs: B)(implicit F: Effect.Partial[R, IdentifiableGuard, B]) = IdentifiableGuard(lhs, rhs, Testable.eq[B])
     }
 
-    implicit def mkOrderingOps(lhs: Identifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(lhs)
+    implicit def mkOrderingOps(lhs: Identifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(GuardId(lhs))
+    implicit def mkOrderingOps(lhs: GeneratedIdentifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(GenGuardId(lhs))
   }
-
-
 
   case class Not[R](bool: Bool[R])(implicit F: Effect[R, Not]) extends Bool[R] {
     override def eval = !bool.eval
-
     override def effect = F.effect(this)
   }
 }

@@ -16,6 +16,7 @@ import codegen.model.ConditionNode.Value
 import codegen.internal.definition.CaseClassLike.CaseClassLikeOps
 import codegen.internal.definition.CaseClassLike.Implicits._
 import codegen.Utils.BindGenericParam
+import monocle.macros.Lenses
 import names.NameOf.{qualifiedNameOfType => typeName}
 
 trait Generate[A] {
@@ -71,6 +72,13 @@ final case class GenException(
                                private val message: String = "",
                                private val cause: Throwable = None.orNull)
   extends Exception(message, cause)
+
+
+trait GeneratedIdentifiable {
+  def name: String
+  def id: UUID
+}
+
 
 object Generate {
   type Kind[F[_]] = Generate[F[Result]]
@@ -141,8 +149,9 @@ object Generate {
       }
 
       val caseVals = Namespace(parent.self, classPrefix).caseVals ++ result
-      Left(
-        CaseClass.withDependencies(classPrefix + parent.name, Set(), caseVals:_*))
+      val genImport: Dependency = ImportDependency(typeName[GeneratedIdentifiable])
+
+      Left(CaseClass(classPrefix + parent.name, Set(genImport), caseVals, List("GeneratedIdentifiable")))
     }
   }
 
@@ -166,20 +175,20 @@ object Generate {
      s"Vector(${values.mkString(",")})"
     }
 
-    implicit val genBigDecimal: Generate[BigDecimal] = Generate.pureNoFormat { _.toString() }
 
     implicit val genBoolean: Generate[Boolean] = Generate.pureNoFormat { if(_) "true" else "false" }
 
     implicit val genCaseClass: Generate[CaseClass] = Generate.obj { c =>
-      val monocle = ImportDependency("monocle.macros.Lenses")
+      val monocle = ImportDependency(typeName[Lenses])
       Result
-        .foldSeq(c.caseVals.map(_.generated)).map(r => s"@Lenses case class ${c.name}($r)")
+        .foldSeq(c.caseVals.map(_.generated)).map(r => s"@Lenses case class ${c.name}($r) ${c.genExtends}")
         .requires(c.dependencies + monocle)
     }
 
     def genThingCaseClass(thing: Namespace[GenThing]): CaseClass = {
       val qualifiedName = thing.namespace + thing.value.name
-      CaseClass(qualifiedName, thing.caseVals:_*)
+      val identifiable: Dependency = ImportDependency(typeName[GeneratedIdentifiable])
+      CaseClass(qualifiedName, Set(identifiable), thing.caseVals, List("GeneratedIdentifiable"))
     }
 
     implicit val genThing: Generate[GenThing] = Generate.expression { thing =>
@@ -187,6 +196,9 @@ object Generate {
     }
 
     implicit val genInt: Generate[Int] = Generate.pureNoFormat { s => s.toString }
+    implicit val genDouble: Generate[Double] = Generate.pureNoFormat { s => s.toString }
+    implicit val genBigDecimal: Generate[BigDecimal] = Generate.pureNoFormat { _.toString() }
+    implicit val genLong: Generate[Long] = Generate.pureNoFormat { s => s.toString }
 
     implicit val genString: Generate[String] = Generate.pureNoFormat { s => s""""$s"""" }
 
@@ -285,9 +297,8 @@ object Generate {
         ImportDependency(typeName[Conditional[Result]] + "._"),
         ImportDependency(typeName[Effect[Nothing, Conditional]] + ".Implicits._")
       )
-      val result = ImportDependency(typeName[Result])
 
-      Result.foldSeq(gen).map(r => s"Conditional[Unit]($r)").requires(conditional + result)
+      Result.foldSeq(gen).map(r => s"Conditional[Unit]($r)").requires(conditional)
     }
 
     implicit def genConditionNode: Generate.Kind[ConditionNode] = Generate.expression {

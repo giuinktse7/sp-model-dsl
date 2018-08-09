@@ -13,7 +13,14 @@ object CaseVal {
   def rawQualified(name: String, value: String, qualifier: String) = new CaseVal(name, qualifier, value)
   def apply[A: Generate](name: String, a: A) = {
     val gen = a.generated
-    new CaseVal(name, a.getClass.getSimpleName, gen.result, gen.dependencies)
+
+    // Special case to get Int instead of Integer
+    val className = a.getClass.getSimpleName match {
+      case "Integer" => "Int"
+      case x => x
+    }
+
+    new CaseVal(name, className, gen.result, gen.dependencies)
   }
 
   /**
