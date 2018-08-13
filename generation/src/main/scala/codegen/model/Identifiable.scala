@@ -4,7 +4,7 @@ import Types.{AttributeMap, _}
 import codegen.evaluate.SPStateValue
 import codegen.internal.Attribute
 import codegen.internal.Attribute.{AttrObject, NamedAttrObject}
-import play.api.libs.json.{JsObject, Json}
+import play.api.libs.json.{JsObject, Json, Writes}
 
 sealed trait Identifiable extends Equals {
   val name: String
@@ -36,6 +36,10 @@ case class SPState(name: String = "state",
                    spAttributes: AttributeMap = AttributeMap(),
                    id: ID = ID()) extends Identifiable {
   def get(id: ID): Option[SPStateValue] = state.get(id)
+}
+
+object SPState {
+  implicit def SPStateValueConversion[A: Writes](a: A): SPStateValue.Value = SPStateValue.Value(Json.toJson(a))
 }
 
 case class Thing(

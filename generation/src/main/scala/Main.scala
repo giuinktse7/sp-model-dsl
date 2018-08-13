@@ -2,19 +2,16 @@
 
 import codegen.model._
 import IdentifiableGraph.IdentifiableToNodeGraph
-import codegen.internal.{Attribute, Effect, Generate, Result}
+import codegen.internal.{Attribute, Generate, Result}
 import codegen.internal.Attribute._
 import Generate.Implicits._
 import Generate.GenOps
-import cats.Eq
-import codegen.ExampleModel
 import codegen.ExampleModel.TestModel
 import codegen.evaluate.SPStateValue.Executing
 import codegen.evaluate._
 import codegen.evaluate.model.{EvalFailure, EvalSuccess}
 import codegen.model.Bool.Equal
 import codegen.model.Types.ID
-import play.api.libs.json.Json
 
 object Main {
   implicit val genThingShape: ConditionShape[GenThing, Attribute] = _.domain
@@ -67,6 +64,7 @@ object Main {
     import codegen.internal.Effect.Implicits._
     import codegen.model.EffectConditional.DSL._
     import Action.idToActionSyntax
+    import SPState.SPStateValueConversion
 
     val someId = ID()
 
@@ -87,7 +85,7 @@ object Main {
 
     val state: SPState = SPState(state = Map(
       operation.id -> Executing,
-      someId -> SPStateValue.Value(23)
+      someId -> 23
     ))
 
     Evaluation.evalOperation(operation, state)(ctx) match {
