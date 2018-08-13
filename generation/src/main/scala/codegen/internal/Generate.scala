@@ -209,7 +209,7 @@ object Generate {
       )
     }
 
-    implicit val genOperation: Generate[Operation[Result]] = Generate.expression { case Operation(name, conditions, attributes, id) =>
+    implicit val genOperation: Generate[EffectOperation[Result]] = Generate.expression { case EffectOperation(name, conditions, attributes, id) =>
       val condGen = conditions.fill("List[Conditional[Unit]]")
       val attrGen = attributes.generated
 
@@ -224,7 +224,7 @@ object Generate {
     }
 
     implicit val genIdentifiable: Generate[Identifiable] = Generate.expression {
-      case x: Operation[_] => erased(x.withKind[Result].generated)(
+      case x: EffectOperation[_] => erased(x.withKind[Result].generated)(
         "The Operation must be parameterized by [Result] to allow generation. Try importing codegen.internal.Effect.Implicits.ForGen._"
       )
       case x: GenThing => x.generated
@@ -290,12 +290,12 @@ object Generate {
     implicit val genAttribute: Generate[Attribute] = Generate.pureExpression { attr =>
       attr.toSPValue.generated.result
     }
-    implicit def genConditional: Generate.Kind[Conditional] = Generate.expression { c =>
+    implicit def genConditional: Generate.Kind[EffectConditional] = Generate.expression { c =>
       val gen = c.proposition.map(_.generated)
       val conditional = Set(
-        ImportDependency(typeName[Conditional[Result]]),
-        ImportDependency(typeName[Conditional[Result]] + "._"),
-        ImportDependency(typeName[Effect[Nothing, Conditional]] + ".Implicits._")
+        ImportDependency(typeName[EffectConditional[Result]]),
+        ImportDependency(typeName[EffectConditional[Result]] + "._"),
+        ImportDependency(typeName[Effect[Nothing, EffectConditional]] + ".Implicits._")
       )
 
       Result.foldSeq(gen).map(r => s"Conditional[Unit]($r)").requires(conditional)

@@ -6,8 +6,8 @@ object ExampleModel {
   import codegen.internal.Effect.Implicits._
   import codegen.internal.GeneratedIdentifiable
   import codegen.model.Bool._
-  import codegen.model.Conditional
-  import codegen.model.Conditional._
+  import codegen.model.EffectConditional
+  import codegen.model.EffectConditional._
   import java.util.UUID
   import monocle.macros.Lenses
   import play.api.libs.json._
@@ -25,8 +25,8 @@ object ExampleModel {
 
   @Lenses case class Generated_r1_o1(
                                       name: String = "o1",
-                                      conditions: List[Conditional[Unit]] = List[Conditional[Unit]](
-                                        Conditional[Unit](
+                                      conditions: List[EffectConditional[Unit]] = List[EffectConditional[Unit]](
+                                        EffectConditional[Unit](
                                           And(
                                             Equal(JsNumber(5), JsNumber(2)),
                                             Equal(JsString("foo"), JsString("bar"))
@@ -59,8 +59,8 @@ object ExampleModel {
 
   @Lenses case class Generated_r1_o2(
                                       name: String = "o2",
-                                      conditions: List[Conditional[Unit]] = List[Conditional[Unit]](
-                                        Conditional[Unit](Equal(JsString("k"), JsString("e")))
+                                      conditions: List[EffectConditional[Unit]] = List[EffectConditional[Unit]](
+                                        EffectConditional[Unit](Equal(JsString("k"), JsString("e")))
                                       ),
                                       attributes: JsObject = JsObject.empty,
                                       id: UUID = UUID.fromString("a555a25d-0597-436d-a5b4-3f8e86a0ca0b"),

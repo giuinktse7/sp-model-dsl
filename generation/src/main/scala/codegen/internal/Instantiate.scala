@@ -43,7 +43,7 @@ object Instantiate {
 
   private def prefixName(prefix: String)(name: String): String = s"${prefix}_$name"
 
-  implicit val instantiateOperation: Instantiate[Operation[Result]] = local { operation =>
+  implicit val instantiateOperation: Instantiate[EffectOperation[Result]] = local { operation =>
     Instance(operation.generated, "Operation")
   }
 
@@ -52,7 +52,7 @@ object Instantiate {
     Instance(res, caseClass.name)
   }
 
-  implicit val conditionalInstance: Instantiate[Conditional[Result]] = local { conditional =>
+  implicit val conditionalInstance: Instantiate[EffectConditional[Result]] = local { conditional =>
     Instance(conditional.generated, "Conditional")
   }
 
@@ -63,7 +63,7 @@ object Instantiate {
   implicit val instantiateIdentifiable: Instantiate[Identifiable] = Instantiate { namespace =>
     val Namespace(value, space) = namespace
     value match {
-      case x: Operation[_] => Namespace(x.withKind[Result], space).instance
+      case x: EffectOperation[_] => Namespace(x.withKind[Result], space).instance
       case x: GenThing => Namespace(x, space).instance
       case x => throw new IllegalArgumentException(s"Can not find an Instantiate[_] in scope for $x.")
     }

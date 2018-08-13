@@ -83,7 +83,7 @@ object Attribute {
     case v: BigDecimal => AttrNumber(v)
     case v: Int => AttrInt(v)
     case v: Double => AttrDouble(v)
-    case v: Float => AttrNumber(BigDecimal(v))
+    case v: Float => AttrNumber(BigDecimal(v.toDouble))
     case v: Long => AttrLong(v)
     case v: Boolean => AttrBoolean(v)
     case v: Seq[Any] => AttrList(v.map(valueToAttribute).toIndexedSeq)

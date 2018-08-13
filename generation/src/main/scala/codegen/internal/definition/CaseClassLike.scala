@@ -2,7 +2,7 @@ package codegen.internal.definition
 
 import codegen.Utils.BindGenericParam
 import codegen.internal.{Namespace, Result}
-import codegen.model.{GenThing, Identifiable, Operation}
+import codegen.model.{GenThing, Identifiable, EffectOperation}
 import codegen.internal.Generate.GenOps
 import codegen.internal.Generate.Implicits._
 
@@ -17,7 +17,7 @@ object CaseClassLike {
 
   def apply[A](f: Namespace[A] => Seq[CaseVal]): CaseClassLike[A] = f(_)
   object Implicits {
-    implicit val caseClassLikeOperation: CaseClassLike[Operation[Result]] = CaseClassLike { namespace =>
+    implicit val caseClassLikeOperation: CaseClassLike[EffectOperation[Result]] = CaseClassLike { namespace =>
       val Namespace(op, space) = namespace
       val conditionalCaseVal = op.conditions.map(_.generated)
       val condValue = s"List[Conditional[Unit]](${conditionalCaseVal.map(_.result).mkString(", ")})"
@@ -44,7 +44,7 @@ object CaseClassLike {
     implicit val caseClassLikeIdentifiable: CaseClassLike[Identifiable] = CaseClassLike { ns =>
       val Namespace(value, space) = ns
       value match {
-        case o: Operation[_] => Namespace(o.withKind[Result], space).caseVals
+        case o: EffectOperation[_] => Namespace(o.withKind[Result], space).caseVals
         case t: GenThing => Namespace(t, space).caseVals
         case x => throw new IllegalArgumentException(s"Can not find a CaseClassLike[_] in scope for $x.")
       }

@@ -3,20 +3,51 @@ package codegen.model
 import java.util.UUID
 
 import cats.Eq
+import codegen.evaluate.SPStateValue
 import codegen.internal.Attribute.AttrObject
 import codegen.internal.{Attribute, Effect, GeneratedIdentifiable}
 import codegen.model.Bool._
 import codegen.model.ConditionNode._
+import codegen.model.Types.ID
 import play.api.libs.json.{JsArray, JsNumber, JsObject, JsString}
 
-import scala.util.Try
+case class Action(id: ID = ID(), effect: ActionEffect) {
+}
 
-case class Conditional[R](
+object Action {
+  implicit final class idToActionSyntax(id: ID) {
+    def effect(e: ActionEffect): Action = Action(id, effect = e)
+    def none(value: SPStateValue): Action = Action(id, effect = NoEffect(value))
+    def inc(n: Int): Action = Action(id, effect = Increment(n))
+    def dec(n: Int): Action = Action(id, effect = Decrement(n))
+    def assign(id: ID): Action = Action(id, effect = Assign(id))
+  }
+
+  def ifNumber(value: SPStateValue)(f: BigDecimal => BigDecimal): SPStateValue = {
+    val result = value.toSPValue.collect { case JsNumber(v) => SPStateValue.Value(JsNumber(f(v))) }
+
+    result.getOrElse(value)
+  }
+}
+
+sealed trait ActionEffect
+
+/**
+  * Value that is independent of a state
+  */
+case class NoEffect(value: SPStateValue) extends ActionEffect
+case class Increment(amount: Int) extends ActionEffect
+case class Decrement(amount: Int) extends ActionEffect
+case class Assign(id: ID) extends ActionEffect
+
+case class EffectConditional[R](
                         proposition: Seq[ConditionNode[R]],
-                        actions: List[Int] = List(), // TODO Change Int to Action
+                        actions: List[Action] = List(),
                         config: AttrObject = AttrObject()
-                      )(implicit F: Effect[R, Conditional]) {
+                      )(implicit F: Effect[R, EffectConditional]) {
   def useEffect: R = F.effect(this)
+  def setConfig(config: AttrObject): EffectConditional[R] = copy(config = config)
+  def setActions(actions: Action*): EffectConditional[R] = copy(actions = actions.toList)
 }
 
 trait ConditionShape[A, B] {
@@ -39,25 +70,29 @@ trait ConditionalImplicits {
 
 object EqImplicits extends ConditionalImplicits
 
-object Conditional extends ConditionalImplicits {
-  type Cond = Conditional[Unit]
+object EffectConditional extends ConditionalImplicits {
+  type Cond = EffectConditional[Unit]
 
-  def apply[R](nodes: ConditionNode[R]*)(implicit F: Effect[R, Conditional]): Conditional[R] = new Conditional(nodes, List(), AttrObject())
-  def apply[R](nodes: Seq[ConditionNode[R]], actions: List[Int], config: AttrObject)(implicit F: Effect[R, Conditional]): Conditional[R] = {
-    new Conditional(nodes, actions, config)
+  def apply[R](nodes: ConditionNode[R]*)(implicit F: Effect[R, EffectConditional]): EffectConditional[R] = new EffectConditional(nodes, List(), AttrObject())
+  def apply[R](nodes: Seq[ConditionNode[R]], actions: List[Action], config: AttrObject)(implicit F: Effect[R, EffectConditional]): EffectConditional[R] = {
+    new EffectConditional(nodes, actions, config)
   }
 
   object DSL extends ConditionalImplicits {
     // implicit class IdentifiableDSL[]
 
-    implicit class DomainDSL[A, C, R](a: A)(implicit shapeA: ConditionShape[A, C], eqC: Eq[C], F: Effect[R, Bool]) {
 
-      def ===[B: Eq](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C]): Bool[R] = {
-        Equal(shapeA.toConditionShape(a), shapeB.toConditionShape(b))
+    implicit class DomainDSL[A, R](a: A)(implicit eqC: Eq[A], F: Effect[R, Bool]) {
+
+      def ===[B](b: B)(implicit shapeB: ConditionShape[B, A], F1: Effect.Partial[R, Equal, A]): Equal[A, R] = {
+        Equal(a, shapeB.toConditionShape(b))
       }
-      def !==[B: Eq](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C], F2: Effect[R, Not]): Bool[R] = {
+
+/*
+      def !==[B](b: B)(implicit shapeB: ConditionShape[B, C], F1: Effect.Partial[R, Equal, C], F2: Effect[R, Not]): Bool[R] = {
         Not(Equal(shapeA.toConditionShape(a), shapeB.toConditionShape(b)))
       }
+      */
     }
 
     implicit class ConditionalDSL[A, B, R](a: A)(implicit F: Effect[R, Bool]) {
@@ -149,7 +184,7 @@ object Bool {
            temp match {
             case x: Int => BigDecimal(x).asInstanceOf[B]
             case x: java.lang.Integer => BigDecimal(x).asInstanceOf[B]
-            case x: Float => BigDecimal(x).asInstanceOf[B]
+            case x: Float => BigDecimal(x.toDouble).asInstanceOf[B]
             case x: Double => BigDecimal(x).asInstanceOf[B]
             case x:  Long => BigDecimal(x).asInstanceOf[B]
             case _ => temp.asInstanceOf[B]

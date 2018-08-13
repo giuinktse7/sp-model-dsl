@@ -1,6 +1,7 @@
 package codegen.model
 
 import Types.{AttributeMap, _}
+import codegen.evaluate.SPStateValue
 import codegen.internal.Attribute
 import codegen.internal.Attribute.{AttrObject, NamedAttrObject}
 import play.api.libs.json.{JsObject, Json}
@@ -23,12 +24,19 @@ case class NamespacedIdentifiable(namespace: String, identifiable: Identifiable)
   override val spAttributes: AttributeMap = identifiable.spAttributes
 }
 
-case class Operation[R](
-                      name: String,
-                      conditions: List[Conditional[R]] = List(),
-                      spAttributes: AttributeMap = AttributeMap(),
-                      id: ID = ID()
+case class EffectOperation[R](
+                               name: String,
+                               conditions: List[EffectConditional[R]] = List(),
+                               spAttributes: AttributeMap = AttributeMap(),
+                               id: ID = ID()
                     ) extends Identifiable
+
+case class SPState(name: String = "state",
+                   state: Map[ID, SPStateValue] = Map(),
+                   spAttributes: AttributeMap = AttributeMap(),
+                   id: ID = ID()) extends Identifiable {
+  def get(id: ID): Option[SPStateValue] = state.get(id)
+}
 
 case class Thing(
                   name: String,

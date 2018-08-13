@@ -8,7 +8,7 @@ import scala.reflect.runtime.universe._
   * Taken from https://github.com/dwickern/scala-nameof/
   * 08/01/2018
   */
-private object NameOfImpl {
+object NameOfImpl {
   def nameOf(c: blackbox.Context)(expr: c.Expr[Any]): c.Tree = {
     import c.universe._
 

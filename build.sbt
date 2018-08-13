@@ -6,7 +6,7 @@ lazy val commonSettings = Seq(
   version := "0.1",
   scalaVersion := "2.12.3",
   autoCompilerPlugins := true,
-  scalacOptions += "-language:experimental.macros",
+  scalacOptions ++= compilerOptions,
   resolvers += Resolver.sonatypeRepo("releases"),
   addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full),
   libraryDependencies ++= commonDependencies,
