@@ -16,7 +16,7 @@ import codegen.internal.definition._
 import codegen.model.ConditionNode.{Definition, IdNode, Value}
 import codegen.internal.definition.CaseClassLike.CaseClassLikeOps
 import codegen.internal.definition.CaseClassLike.Implicits._
-import codegen.model.Bool.{Equal, IdentifiableGuard, Not}
+import codegen.model.Bool.{Equal, Not}
 import monocle.macros.Lenses
 import names.NameOf.{qualifiedNameOfType => typeName}
 

@@ -96,7 +96,7 @@ object Main {
 
   def exper(): Unit = {
     import Condition.DSL._
-    import codegen.model.Bool.IdentifiableGuard._
+    import codegen.model.Bool.StateComparison._
     import Action._
 
     val m = GeneratedModel()
@@ -105,7 +105,8 @@ object Main {
         m.mainThing.someOperation.subThing -> StateDomain.int(_ < 100)
       )
 
-    val condition = Condition(m.mainThing === Executing && m.mainThing.someOperation.subThing > 40).setActions(
+    // val condition = Condition(m.mainThing === Executing && m.mainThing.someOperation.subThing > 40).setActions(
+    val condition = Condition(m.mainThing.someOperation.subThing === 40).setActions(
       m.mainThing.someOperation.subThing.inc(2)
     ).setConfig(Attribute(
       "group" -> DefaultGroup.name,
@@ -116,7 +117,7 @@ object Main {
 
     implicit val state: SPState = SPState(state = Map(
       m.mainThing -> Executing,
-      m.mainThing.someOperation.subThing -> 56,
+      m.mainThing.someOperation.subThing -> 40,
       op -> Executing
     ))
 

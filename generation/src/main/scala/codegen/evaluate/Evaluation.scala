@@ -4,10 +4,10 @@ import codegen.evaluate.SPStateValue._
 import codegen.evaluate.model._
 import codegen.internal.Attribute
 import codegen.internal.Attribute.AttrString
-import codegen.model.Bool.IdentifiableGuard
+import codegen.model.Bool.{EQ, OrderComparison, StateComparison}
 import codegen.model.Types.SPValue
 import codegen.model._
-import play.api.libs.json.{JsNumber, JsValue, Json, Writes}
+import play.api.libs.json.{Json, Writes}
 
 sealed trait SPStateValue {
   def toSPValue: Option[SPValue] = this match {
@@ -26,6 +26,8 @@ object SPStateValue {
   case class Value(value: SPValue) extends SPStateValue {
     // def apply(): SPValue =
   }
+
+  def apply(value: SPValue): Value = Value(value)
 
   object Value {
     def apply[A: Writes](a: A): Value = Value(Json.toJson(a))
@@ -101,7 +103,13 @@ object Evaluation {
     }
   }
 
+  def evalStateComparison(comp: StateComparison, s: SPState): Boolean = comp match {
+    case ord: OrderComparison => ord.compareOption(s.get)
+    case eq: EQ => eq.compareOption(s.get)
+  }
+
   def evalBool(bool: Bool, s: SPState): Boolean = bool match {
+    case comp: StateComparison => evalStateComparison(comp, s)
     case Bool.And(fst, snd) => evalBool(fst, s) && evalBool(snd, s)
     case Bool.Or(fst, snd) => evalBool(fst, s) || evalBool(snd, s)
     case Bool.Equal(lhs, rhs) => (lhs, rhs) match {
@@ -109,7 +117,8 @@ object Evaluation {
       case (a, b) => a == b
     }
     case Bool.Not(expr) => !evalBool(expr, s)
-    case guard@IdentifiableGuard(identified, _, _) => s.get(identified.id).exists(guard.test)
+    case Bool.False => false
+    case Bool.True => true
   }
 
   def evalCondition(c: Cond, state: SPState): Boolean = {

@@ -2,11 +2,10 @@ package codegen.model
 
 import java.util.UUID
 
-import cats.Eq
 import codegen.evaluate.SPStateValue
 import codegen.internal.Attribute.AttrObject
 import codegen.internal.GeneratedIdentifiable
-import codegen.model.Action.IdToActionSyntax
+import codegen.model.Bool.StateComparison.Predicate
 import codegen.model.Bool._
 import codegen.model.ConditionNode._
 import codegen.model.Types.ID
@@ -108,35 +107,6 @@ object Bool {
   case object False extends Bool
 
   case class Equal(lhs: ConditionNode, rhs: ConditionNode) extends Bool
-/*
-  trait Compare[A, B] {
-    def compare(a: A, b: B): Int
-
-    def eq(a: A, b: B) = a == b
-    def gt(a: A, b: B) = a < b
-    def lt[A](a: A, b: B) =
-    def gteq[A](a: A, b: B) =
-    def lteq[A](a: A, b: B) =
-  }
-*/
-  trait Testable[A] {
-    def test(a1: A, a2: A): Boolean
-  }
-
-  object Testable {
-    def any(f: (Any, Any) => Boolean): Testable[Any] = of[Any](f)
-    def of[A](f: (A, A) => Boolean): Testable[A] = f.apply
-
-    // def eq[A] = Testable.of[A](_ == _)
-    def eq[A] = Testable.of[A]((a, b) => {
-      println(s"$a == $b?")
-      a == b
-    })
-    def gt[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.gt(a, b))
-    def lt[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.lt(a, b))
-    def gteq[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.gteq(a, b))
-    def lteq[A](implicit cmp: Ordering[_ >: A]) = Testable.of[A]((a, b) => cmp.lteq(a, b))
-  }
 
   sealed trait Identified {
     def id: UUID
@@ -144,42 +114,88 @@ object Bool {
   case class GenGuardId(obj: GeneratedIdentifiable) extends Identified { val id = obj.id }
   case class GuardId(obj: Identifiable) extends Identified { val id = obj.id }
 
-  case class IdentifiableGuard[B: Writes, R](a: Identified, b: B, T: Testable[R]) extends Bool {
-    def test(value: SPStateValue): Boolean = {
-      value match {
-        case SPStateValue.Value(v) => v match {
-          case JsNumber(n) => T.test(n.asInstanceOf[R], b.asInstanceOf[R])
-          case JsString(s) => T.test(s.asInstanceOf[R], b.asInstanceOf[R])
-          case other => T.test(other.asInstanceOf[R], Json.toJson(b).asInstanceOf[R])
-        }
-        case other => T.test(other.asInstanceOf[R], b.asInstanceOf[R])
-      }
-      /*val result = b match {
-        case _: BigDecimal =>
-           temp match {
-            case x: Int => BigDecimal(x).asInstanceOf[B]
-            case x: java.lang.Integer => BigDecimal(x).asInstanceOf[B]
-            case x: Float => BigDecimal(x.toDouble).asInstanceOf[B]
-            case x: Double => BigDecimal(x).asInstanceOf[B]
-            case x:  Long => BigDecimal(x).asInstanceOf[B]
-            case _ => temp.asInstanceOf[B]
-          }
-        case _ => temp.asInstanceOf[B]
-      }*/
+  sealed trait StateComparison extends Bool {
+    def id: ID
+    def rhs: SPStateValue
+    def compare(f: ID => SPStateValue): Boolean
+    def compareOption(f: ID => Option[SPStateValue]): Boolean = f(id).exists(lhs => compare(_ => lhs))
+
+
+    def values(lhs: SPStateValue): Option[(JsValue, JsValue)] = StateComparison.values(lhs, rhs)
+    def numbers(lhs: SPStateValue, f: (BigDecimal, BigDecimal) => Boolean): Option[Boolean] = StateComparison.numbers(lhs, rhs)(f)
+    def strings(lhs: SPStateValue, f: (String, String) => Boolean): Option[Boolean] = StateComparison.strings(lhs, rhs)(f)
+  }
+
+  object StateComparison {
+    trait Predicate[F[_]] {
+      def test[A](l: A, r: A)(implicit F: F[A]): Boolean
+    }
+
+    def orderComp(lhs: SPStateValue, rhs: SPStateValue)(p: Predicate[Ordering]): Boolean = {
+      numbers(lhs, rhs)(p.test)
+        .orElse(strings(lhs, rhs)(p.test))
+        .getOrElse(false)
+    }
+
+    def values(lhs: SPStateValue, rhs: SPStateValue): Option[(JsValue, JsValue)] = (lhs, rhs) match {
+      case (SPStateValue.Value(v1), SPStateValue.Value(v2)) => Some((v1, v2))
+      case _ => None
+    }
+
+    def numbers(lhs: SPStateValue, rhs: SPStateValue)(f: (BigDecimal, BigDecimal) => Boolean): Option[Boolean] = values(lhs, rhs).flatMap {
+      case (JsNumber(n1), JsNumber(n2)) => Some(f(n1, n2))
+      case _ => None
+    }
+
+    def strings(lhs: SPStateValue, rhs: SPStateValue)(f: (String, String) => Boolean): Option[Boolean] = values(lhs, rhs).flatMap {
+      case (JsString(s1), JsString(s2)) => Some(f(s1, s2))
+      case _ => None
+    }
+
+    class Ops(id: ID) {
+      def >(rhs: SPStateValue) = GT(id, rhs)
+      def >=(rhs: SPStateValue) = GT(id, rhs)
+      def <(rhs: SPStateValue) = GT(id, rhs)
+      def <=(rhs: SPStateValue) = GT(id, rhs)
+      def ===(rhs: SPStateValue) = EQ(id, rhs)
+    }
+
+    implicit def toStateValue[A: Writes](a: A): SPStateValue = SPStateValue(Json.toJson(a))
+    implicit def mkOrderingOps(lhs: Identifiable): Ops = new Ops(lhs.id)
+    implicit def mkOrderingOps(lhs: GeneratedIdentifiable): Ops = new Ops(lhs.id)
+  }
+
+  trait OrderComparison extends StateComparison {
+    def compare(f: ID => SPStateValue): Boolean = StateComparison.orderComp(f(id), rhs)(p)
+    val p: Predicate[Ordering]
+  }
+
+  case class GT(id: ID, rhs: SPStateValue) extends OrderComparison {
+    lazy val p: Predicate[Ordering] = new Predicate[Ordering] {
+      override def test[A](l: A, r: A)(implicit F: Ordering[A]) = F.gt(l, r)
     }
   }
 
-  object IdentifiableGuard {
-    class Ops(lhs: Identified) {
-      def <[B: Writes](rhs: B)(implicit cmp: Ordering[_ >: B]) = IdentifiableGuard[B, JsValue](lhs, rhs, Testable.lt[JsValue])
-      def <=[B: Writes](rhs: B)(implicit cmp: Ordering[_ >: B]) = IdentifiableGuard[B, JsValue](lhs, rhs, Testable.lteq[JsValue])
-      def >[B: Writes](rhs: B)(implicit cmp: Ordering[_ >: B]) = IdentifiableGuard[B, JsValue](lhs, rhs, Testable.gt[JsValue])
-      def >=[B: Writes](rhs: B)(implicit cmp: Ordering[_ >: B]) = IdentifiableGuard[B, JsValue](lhs, rhs, Testable.gteq[JsValue])
-      def ===[B: Writes](rhs: B) = IdentifiableGuard[B, B](lhs, rhs, Testable.eq[B])
+  case class LT(id: ID, rhs: SPStateValue) extends OrderComparison {
+    lazy val p: Predicate[Ordering] = new Predicate[Ordering] {
+      override def test[A](l: A, r: A)(implicit F: Ordering[A]) = F.lt(l, r)
     }
+  }
 
-    implicit def mkOrderingOps(lhs: Identifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(GuardId(lhs))
-    implicit def mkOrderingOps(lhs: GeneratedIdentifiable): IdentifiableGuard.Ops = new IdentifiableGuard.Ops(GenGuardId(lhs))
+  case class GTE(id: ID, rhs: SPStateValue) extends OrderComparison {
+    lazy val p: Predicate[Ordering] = new Predicate[Ordering] {
+      override def test[A](l: A, r: A)(implicit F: Ordering[A]) = F.gteq(l, r)
+    }
+  }
+
+  case class LTE(id: ID, rhs: SPStateValue) extends OrderComparison {
+    lazy val p: Predicate[Ordering] = new Predicate[Ordering] {
+      override def test[A](l: A, r: A)(implicit F: Ordering[A]) = F.lteq(l, r)
+    }
+  }
+
+  case class EQ(id: ID, rhs: SPStateValue) extends StateComparison {
+    override def compare(f: ID => SPStateValue) = f(id) == rhs
   }
 
   case class Not(bool: Bool) extends Bool
