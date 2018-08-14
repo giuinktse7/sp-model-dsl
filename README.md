@@ -1,7 +1,7 @@
 # sp-model-dsl
 
 ## generation
-Contains main code for generation. Run by calling the sbt command generation/run
+Contains main code for generation. Run by calling the sbt command generation/run.
 
 ## macros
 Macros for simplifying the DSL. Currently unused.
