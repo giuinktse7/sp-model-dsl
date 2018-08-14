@@ -1,8 +1,7 @@
 package codegen.internal.definition
 
-import codegen.Utils.BindGenericParam
-import codegen.internal.{Namespace, Result}
-import codegen.model.{GenThing, Identifiable, EffectOperation}
+import codegen.internal.Namespace
+import codegen.model.{GenThing, Identifiable, Operation}
 import codegen.internal.Generate.GenOps
 import codegen.internal.Generate.Implicits._
 
@@ -17,15 +16,15 @@ object CaseClassLike {
 
   def apply[A](f: Namespace[A] => Seq[CaseVal]): CaseClassLike[A] = f(_)
   object Implicits {
-    implicit val caseClassLikeOperation: CaseClassLike[EffectOperation[Result]] = CaseClassLike { namespace =>
-      val Namespace(op, space) = namespace
+    implicit val caseClassLikeOperation: CaseClassLike[Operation] = CaseClassLike { namespace =>
+      val Namespace(op, _) = namespace
       val conditionalCaseVal = op.conditions.map(_.generated)
-      val condValue = s"List[Conditional[Unit]](${conditionalCaseVal.map(_.result).mkString(", ")})"
+      val condValue = s"List[Conditional](${conditionalCaseVal.map(_.result).mkString(", ")})"
       val condDeps = conditionalCaseVal.flatMap(_.dependencies).toSet
 
       List(
         CaseVal("name", op.name),
-        CaseVal.rawQualified("conditions", condValue, "List[Conditional[Unit]]").addDependencies(condDeps),
+        CaseVal.rawQualified("conditions", condValue, "List[Conditional]").addDependencies(condDeps),
         CaseVal("attributes", op.spAttributes),
         CaseVal("id", op.id)
       )
@@ -44,7 +43,7 @@ object CaseClassLike {
     implicit val caseClassLikeIdentifiable: CaseClassLike[Identifiable] = CaseClassLike { ns =>
       val Namespace(value, space) = ns
       value match {
-        case o: EffectOperation[_] => Namespace(o.withKind[Result], space).caseVals
+        case o: Operation => Namespace(o, space).caseVals
         case t: GenThing => Namespace(t, space).caseVals
         case x => throw new IllegalArgumentException(s"Can not find a CaseClassLike[_] in scope for $x.")
       }

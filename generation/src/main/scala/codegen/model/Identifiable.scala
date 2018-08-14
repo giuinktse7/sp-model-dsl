@@ -3,7 +3,7 @@ package codegen.model
 import Types.{AttributeMap, _}
 import codegen.evaluate.SPStateValue
 import codegen.internal.Attribute
-import codegen.internal.Attribute.{AttrObject, NamedAttrObject}
+import codegen.internal.Attribute.{AttrObject, NamedAttrObject, ValidAttr}
 import play.api.libs.json.{JsObject, Json, Writes}
 
 sealed trait Identifiable extends Equals {
@@ -24,11 +24,11 @@ case class NamespacedIdentifiable(namespace: String, identifiable: Identifiable)
   override val spAttributes: AttributeMap = identifiable.spAttributes
 }
 
-case class EffectOperation[R](
-                               name: String,
-                               conditions: List[EffectConditional[R]] = List(),
-                               spAttributes: AttributeMap = AttributeMap(),
-                               id: ID = ID()
+case class Operation(
+                      name: String,
+                      conditions: List[Condition] = List(),
+                      spAttributes: AttributeMap = AttributeMap(),
+                      id: ID = ID()
                     ) extends Identifiable
 
 case class SPState(name: String = "state",
@@ -49,7 +49,7 @@ case class Thing(
                 ) extends Identifiable
 
 object Thing {
-  def forGen(name: String, attributes: AttrObject): GenThing = GenThing(name, attributes)
+  def forGen(name: String): GenThing = GenThing(name, AttrObject())
   def forGen(name: String, attributes: NamedAttrObject): GenThing = GenThing(name, attributes)
 }
 
@@ -70,6 +70,8 @@ case class GenThing(name: String, attributes: Attribute, id: ID = ID()) extends 
     case o@AttrObject(_) => o.get(Attribute.DomainKey).getOrElse(o)
     case x => x
   }
+
+  def setAttributes(attrs: (String, ValidAttr)*): GenThing = copy(attributes = Attribute(attrs:_*))
 }
 
 object GenThing {

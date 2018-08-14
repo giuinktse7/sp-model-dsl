@@ -6,8 +6,9 @@ import codegen.model.Types.SPValue
 import play.api.libs.json._
 import sun.reflect.generics.reflectiveObjects.NotImplementedException
 import Generate.Implicits._
+import cats.{Functor, Traverse}
 
-import scala.collection.Seq
+import scala.collection.{GenSeq, Seq, SeqLike}
 
 sealed trait Attribute {
   def toSPValue: SPValue
@@ -25,7 +26,7 @@ sealed trait Attribute {
       case AttrDouble(n) => CaseVal(key, n)
       case AttrLong(n) => CaseVal(key, n)
       case AttrNumber(n) => CaseVal(key, n)
-      case AttrList(_) => throw new NotImplementedException
+      case AttrList(k) => throw new NotImplementedException
 
       case AttrListForGen(_, generatedValues, qualifier) =>
         val gen = Result.foldSeq(generatedValues)
@@ -63,9 +64,8 @@ object Attribute {
   }
 
   import scala.reflect.runtime.universe.typeOf
-  implicit def listToValid[A: Manifest: Generate](list: Seq[A]): ValidAttr = TypedAttr(list, s"Seq[${typeOf[A].typeSymbol.fullName}]")
+  implicit def listToValid[A: Manifest: Generate](list: List[A]): TypedAttr[A] = TypedAttr(list, s"Seq[${typeOf[A].typeSymbol.fullName}]")
   implicit def valueToValid(value: Any): ValidAttr = AnyAttr(value)
-
   /**
     * Required to allow code generation to access generic types of eg. Lists
     */

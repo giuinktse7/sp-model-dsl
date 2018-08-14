@@ -40,8 +40,10 @@ case class EvalContext(
   override def kinds = Set(PreCondition, PostCondition, ResetCondition)
 
   override def hasKind(value: String): Boolean = ConditionKind.fromString(value).exists(kinds.contains)
+
+  def setDomain(newDomain: (ID, SPStateValue => Boolean)*): EvalContext = copy(domain = StateDomain(newDomain.toMap))
 }
 
 object EvalContext {
-  def apply(groups: Set[ContextGroup])(domain: (ID, SPStateValue => Boolean)*): EvalContext = EvalContext(groups, StateDomain(domain.toMap))
+  def apply(groups: Set[ContextGroup]): EvalContext = EvalContext(groups, StateDomain())
 }

@@ -1,5 +1,6 @@
 package codegen.internal
 
+import java.nio.file.Path
 import java.util.UUID
 
 import fs2.{Pipe, Stream, io, text}
@@ -12,14 +13,14 @@ import Generate.GenOps
 import codegen.internal.Attribute.AttrObject
 import play.api.libs.json._
 import codegen.internal.definition._
-import codegen.model.ConditionNode.Value
+import codegen.model.ConditionNode.{Definition, IdNode, Value}
 import codegen.internal.definition.CaseClassLike.CaseClassLikeOps
 import codegen.internal.definition.CaseClassLike.Implicits._
-import codegen.Utils.BindGenericParam
+import codegen.model.Bool.{Equal, IdentifiableGuard, Not}
 import monocle.macros.Lenses
 import names.NameOf.{qualifiedNameOfType => typeName}
 
-trait Generate[A] {
+trait Generate[A] { self =>
   protected def format: String => String
   protected def generate: A => Result
 
@@ -28,10 +29,35 @@ trait Generate[A] {
 
     Result(format(result), dependencies)
   }
+
+  def mapDependencies(f: Set[Dependency] => Set[Dependency]): Generate[A] = new Generate[A] {
+    override protected def format = self.format
+
+    override protected def generate = self.generate.andThen(res => res.mapDependencies(f))
+  }
 }
 
+// TODO Implement code Regions based on dependency type.
+/*
+ * This will provide more fine-grained control over file structure at the definition site of a Generate[A].
+ * Eg. to enclose part of the generated code in an object {}, one could:
+ * Generate.obj { o =>
+ * val r1 = Region(PackageDependency, ImportDependency) // (Maybe define regions by dependency priority?)
+ * val r2 = Region.allExcept(r1)
+ * CompilationOrder(
+ *   r1,
+ *   r2.map(s => s"object ${o.name} { $s }")
+ * )
+ *
+ * If we allow definition of regions by priority, we could do eg.Region.range(0, 10)
+ * instead of specifying explicit region classes.
+ *
+ * The CompilationOrder would be used similarly to how Result.compile is currently used.
+ */
 case class Result(result: String, dependencies: Set[Dependency] = Set()) {
-  def compile: String = List(dependencies.generated.result, result).mkString("\n")
+  def compile: String = {
+    List(dependencies.generated.result, result).mkString("\n")
+  }
   def tupled: (String, Set[Dependency]) = (result, dependencies)
 
   def combine(other: Result)(f: (String, String) => String) = Result(
@@ -40,6 +66,7 @@ case class Result(result: String, dependencies: Set[Dependency] = Set()) {
   )
 
   def requires[A <: Dependency](deps: Set[A]): Result = copy(dependencies = this.dependencies ++ deps)
+  def mapDependencies(f: Set[Dependency] => Set[Dependency]): Result = copy(dependencies = f(this.dependencies))
 
   def map(f: String => String): Result = copy(result = f(result))
 }
@@ -49,6 +76,7 @@ case class Result(result: String, dependencies: Set[Dependency] = Set()) {
   * through obj.generated.
   */
 object Result {
+
   def foldSeq(rs: Seq[Result]): Result = Result(
     rs.map(_.result).mkString(", "),
     rs.flatMap(_.dependencies).toSet
@@ -81,6 +109,7 @@ trait GeneratedIdentifiable {
 
 
 object Generate {
+  def saveAsFile[A: Generate](path: Path, fileName: String)(a: A): Stream[IO, Unit] = writeFile(ScalaFile(path, a, fileName))
   type Kind[F[_]] = Generate[F[Result]]
   type Kind2[F[_, _], A] = Generate[F[A, Result]]
   type Kind3[F[_, _, _], A, B] = Generate[F[A, B, Result]]
@@ -209,8 +238,8 @@ object Generate {
       )
     }
 
-    implicit val genOperation: Generate[EffectOperation[Result]] = Generate.expression { case EffectOperation(name, conditions, attributes, id) =>
-      val condGen = conditions.fill("List[Conditional[Unit]]")
+    implicit val genOperation: Generate[Operation] = Generate.expression { case Operation(name, conditions, attributes, id) =>
+      val condGen = conditions.fill("List[Conditional]")
       val attrGen = attributes.generated
 
       Result.map3(condGen, attrGen, id.generated)((cond, attr, id) => s"Operation($name, $cond, $attr, $id)")
@@ -224,9 +253,7 @@ object Generate {
     }
 
     implicit val genIdentifiable: Generate[Identifiable] = Generate.expression {
-      case x: EffectOperation[_] => erased(x.withKind[Result].generated)(
-        "The Operation must be parameterized by [Result] to allow generation. Try importing codegen.internal.Effect.Implicits.ForGen._"
-      )
+      case x: Operation => x.generated
       case x: GenThing => x.generated
       case x => throw new IllegalArgumentException(s"There is no implicit Generate type class for $x.")
     }
@@ -238,7 +265,7 @@ object Generate {
       }
     }
 
-    implicit val genDependencies: Generate[Set[Dependency]] = Generate.pureExpression { Dependency.fold }
+    implicit val genDependencies: Generate[Set[Dependency]] = Generate.pureNoFormat { Dependency.fold }
 
 
     implicit val genModel: Generate[Model] = Generate.expression { model =>
@@ -279,7 +306,7 @@ object Generate {
         case _ => throw new NotImplementedError()
       }
 
-      val playJson = ImportDependency("import play.api.libs.json._")
+      val playJson = ImportDependency("play.api.libs.json._")
       Result(res, Set(playJson))
     }
 
@@ -290,61 +317,58 @@ object Generate {
     implicit val genAttribute: Generate[Attribute] = Generate.pureExpression { attr =>
       attr.toSPValue.generated.result
     }
-    implicit def genConditional: Generate.Kind[EffectConditional] = Generate.expression { c =>
+    implicit def genConditional: Generate[Condition] = Generate.expression { c =>
       val gen = c.proposition.map(_.generated)
-      val conditional = Set(
-        ImportDependency(typeName[EffectConditional[Result]]),
-        ImportDependency(typeName[EffectConditional[Result]] + "._"),
-        ImportDependency(typeName[Effect[Nothing, EffectConditional]] + ".Implicits._")
-      )
+      val conditional = Set(ImportDependency(typeName[Condition]))
 
-      Result.foldSeq(gen).map(r => s"Conditional[Unit]($r)").requires(conditional)
+      Result.foldSeq(gen).map(r => s"Conditional($r)").requires(conditional)
     }
 
-    implicit def genConditionNode: Generate.Kind[ConditionNode] = Generate.expression {
-      case bool: Bool[Result] => erased(bool.effect)(
-        "The Bool must be parameterized by [Result] to allow generation. Try importing codegen.internal.Effect.Implicits.ForGen._"
-      )
-      case defn: ConditionNode.Definition[_, _, Result] => defn.effect
-      case value: ConditionNode.Value[_, Result] => value.effect
+    implicit def genStateId: Generate[IdNode] = Generate.expression(_.id.generated.map(id => s"StateID($id)"))
+
+
+    private lazy val genConditionNodeBase: Generate[ConditionNode] = Generate.expression {
+      case bool: Bool => bool.generated
+      case Definition(lhs, rhs) => Result.map2(lhs.generated, rhs.generated)((l, r) => s"Definition($l, $r)")
+      case Value(v) => v.generated.map(res => s"Value($res)")
+      case x => throw GenException(s"Code can not be generated for the condition value $x.")
+    }
+    implicit def genConditionNode: Generate[ConditionNode] = {
+      genConditionNodeBase.mapDependencies(_ + ImportDependency("codegen.model.ConditionNode._"))
     }
 
 
-    implicit def genBool: Generate.Kind[Bool] = Generate.expression { bool =>
+    implicit def genBool: Generate[Bool] = Generate.expression { bool =>
       val res = bool match {
-        case and: Bool.And[Result] => and.generated
-        case equal: Bool.Equal[_, Result] => equal.effect
+        case and: Bool.And => and.generated
+        case or: Bool.Or => or.generated
+        case Equal(lhs, rhs) => Result.map2(lhs.generated, rhs.generated)((l, r) => s"Equal($l, $r)")
+        case not@Not(_) => not.generated
         // case or: Bool.Or[A, _, B, _] => or.generated
-        case _: Bool.True[Result] => Result("True")
-        case _: Bool.False[Result] => Result("False")
-        case x => throw GenException(s"The Bool $x can not be used for generation. Try bringing an implicit Generate[] for it into scope.")
+        case Bool.True => Result("True")
+        case Bool.False => Result("False")
+        case x => throw GenException(s"The Bool $x can not be used for generation.")
       }
 
-      res.requires(Set(ImportDependency(typeName[Bool[Result]] + "._")))
+      res.requires(Set(ImportDependency(typeName[Bool] + "._")))
     }
 
-    implicit def genConditionDefinition[A: Generate, B: Generate]: Generate.Kind3[ConditionNode.Definition, A, B] = Generate.expression {
+    implicit def genConditionDefinition: Generate[ConditionNode.Definition] = Generate.expression {
       case ConditionNode.Definition(lhs, rhs) => lhs.generated.combine(rhs.generated)((l, r) => s"Definition($l, $r)")
     }
 
-    implicit def genConditionValue[A: Generate]: Generate.Kind2[Value, A] = Generate.pureExpression {
-      case ConditionNode.Value(v) => s"Value($v)"
-    }
-
-    implicit def genBoolAnd: Generate.Kind[Bool.And] = Generate.expression {
+    implicit def genBoolAnd: Generate[Bool.And] = Generate.expression {
       case Bool.And(fst, snd) => fst.generated.combine(snd.generated)((f, s) => s"And($f, $s)")
     }
 
-    implicit val genBoolOr: Generate.Kind[Bool.Or] = Generate.expression {
+    implicit val genBoolOr: Generate[Bool.Or] = Generate.expression {
       case Bool.Or(fst, snd) => fst.generated.combine(snd.generated)((f, s) => s"Or($f, $s)")
     }
 
-    implicit val genBoolTrue: Generate.Kind[Bool.True] = Generate.constant("True")
-    implicit val genBoolFalse: Generate.Kind[Bool.False] = Generate.constant("False")
-    implicit def genBoolEqual[A: Generate]: Generate.Kind2[Bool.Equal, A] = Generate.expression {
+    implicit def genBoolEqual: Generate[Bool.Equal] = Generate.expression {
       case Bool.Equal(lhs, rhs) => lhs.generated.combine(rhs.generated)((l, r) => s"Equal($l, $r)")
     }
-    implicit val genBoolNot: Generate.Kind[Bool.Not] = Generate.expression {
+    implicit val genBoolNot: Generate[Bool.Not] = Generate.expression {
       case Bool.Not(bool) => bool.generated.map(r => s"Not($r)")
     }
 
@@ -364,11 +388,6 @@ object Generate {
       def fill(container: String): Result = {
         Result.foldSeq(list.map(_.generated)).map(r => s"$container($r)")
       }
-    }
-
-    private def erased[B](run: => B)(errorMessage: String): B = {
-      try { run }
-      catch { case _: ClassCastException => throw GenException(errorMessage) }
     }
   }
 }

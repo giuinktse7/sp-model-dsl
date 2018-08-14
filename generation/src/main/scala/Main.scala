@@ -1,34 +1,32 @@
 
 
+import java.nio.file.Paths
+
 import codegen.model._
-import IdentifiableGraph.IdentifiableToNodeGraph
-import codegen.internal.{Attribute, Generate, Result}
+import codegen.internal.{Attribute, Generate, Result, ScalaFile}
 import codegen.internal.Attribute._
-import Generate.Implicits._
 import Generate.GenOps
-import codegen.ExampleModel.TestModel
 import codegen.evaluate.SPStateValue.Executing
 import codegen.evaluate._
 import codegen.evaluate.model.{EvalFailure, EvalSuccess}
-import codegen.model.Bool.Equal
+import codegen.generated.{Generated_mainThing, GeneratedModel}
+import codegen.internal.definition.{CaseClassDefinition, FieldDefinition}
 import codegen.model.Types.ID
 
 object Main {
-  implicit val genThingShape: ConditionShape[GenThing, Attribute] = _.domain
-  implicit val intShape: ConditionShape[Int, Attribute] = AttrInt(_)
-  implicit val stringShape: ConditionShape[String, Attribute] = AttrString(_)
-  implicit def attrShape[A <: Attribute]: ConditionShape[A, Attribute] = x => x
-  implicit def identityShape[A]: ConditionShape[A, A] = x => x
-
-
   def main(args: Array[String]): Unit = {
-    //create()
-    /*
-    val subThing = Thing.forGen("subThing", Attribute("domain" -> List("foo", "bar")))
-    val condition = Conditional((5 !== 2) && ("foo" === "bar"))
+    import Condition.DSL._
+    import IdentifiableGraph.IdentifiableToNodeGraph
+    import Generate.Implicits._
+
+    val subThing = Thing.forGen("subThing")
+      .setAttributes("domain" -> List("foo", "bar"))
+
+    val condition = Condition((5 !== 2) && ("foo" === "bar"), subThing := 25)
     val someOperation = Operation("someOperation", List(condition))
 
-    val mainThing = Thing.forGen("mainThing", Attribute("someAttr" -> "kalle"))
+    val mainThing = Thing.forGen("mainThing")
+      .setAttributes("someAttr" -> "kalle", "numberMaybe" -> 255)
 
     val items = mainThing -> (
       someOperation -> subThing
@@ -36,13 +34,17 @@ object Main {
 
     val model = Model("TestModel", items)
 
-    println(show(model.generated))*/
+    val directory = Paths.get("codegen/generated")
 
-    // conditionals()
+    val saveFile = Generate.saveAsFile(directory, "GeneratedModel")(model)
+
+   // saveFile.compile.drain.unsafeRunSync()
+    println(s"File saved to $directory\\GeneratedModel.")
 //     create()
-    evalTest()
-  }
+//     evalTest()
+     exper()
 
+  }
   def show(result: Result): String = {
     Generate.expressionFormatter(result.compile)
   }
@@ -61,31 +63,28 @@ object Main {
 */
 
   def evalTest(): Unit = {
-    import codegen.internal.Effect.Implicits._
-    import codegen.model.EffectConditional.DSL._
-    import Action.idToActionSyntax
+    import codegen.model.Condition.DSL._
+    import Action.IdToActionSyntax
     import SPState.SPStateValueConversion
 
     val someId = ID()
 
-    val condition = EffectConditional[Unit](5 === 5)
+    val condition = Condition(5 === 5)
       .setConfig(Attribute(
         "group" -> DefaultGroup.name,
         "kind" -> PostCondition.name
       ))
       .setActions(someId.inc(5))
 
+    val operation = Operation("MyOperation", List(condition))
 
-
-    val operation = EffectOperation("MyOperation", List(condition))
-
-    val ctx: EvalContext = EvalContext(Set(DefaultGroup))(
+    val ctx: EvalContext = EvalContext(Set(DefaultGroup)).setDomain(
       someId -> StateDomain.int(_ < 25)
     )
 
     val state: SPState = SPState(state = Map(
       operation.id -> Executing,
-      someId -> 23
+      someId -> 18
     ))
 
     Evaluation.evalOperation(operation, state)(ctx) match {
@@ -94,35 +93,56 @@ object Main {
     }
   }
 
+
   def exper(): Unit = {
-    import codegen.internal.Effect.Implicits._
-    import codegen.model.Bool.IdentifiableGuard.mkOrderingOps
+    import Condition.DSL._
+    import codegen.model.Bool.IdentifiableGuard._
+    import Action._
 
-    val m = TestModel()
+    val m = GeneratedModel()
 
-    val state = Map(m.r1.o1.t1.id -> 5)
+    val ctx: EvalContext = EvalContext(Set(DefaultGroup)).setDomain(
+        m.mainThing.someOperation.subThing -> StateDomain.int(_ < 100)
+      )
 
-    val guard = m.r1.o1.t1 >= m.r1.o1.t1.attributes.domain
-    println(guard.test(id => state(id)))
+    val condition = Condition(m.mainThing === Executing && m.mainThing.someOperation.subThing > 40).setActions(
+      m.mainThing.someOperation.subThing.inc(2)
+    ).setConfig(Attribute(
+      "group" -> DefaultGroup.name,
+      "kind" -> PostCondition.name
+    ))
+
+    val op = Operation("An_Operation", conditions = List(condition))
+
+    implicit val state: SPState = SPState(state = Map(
+      m.mainThing -> Executing,
+      m.mainThing.someOperation.subThing -> 56,
+      op -> Executing
+    ))
+
+    Evaluation.evalOperation(op, state)(ctx) match {
+      case s@EvalSuccess(res, _) => println(s"Result: $res\nLog:\n  ${s.showLog}")
+      case EvalFailure(errors) => println(errors.map(_.msg))
+    }
   }
 
+
   def create(): Unit = {
-    import EffectConditional.DSL._
-    import codegen.internal.Effect.Implicits.ForGen._
-    // import codegen.internal.Effect.Implicits._
+    import IdentifiableGraph.IdentifiableToNodeGraph
+    import Generate.Implicits.genModel
+    import Condition.DSL._
 
-    val r1 = Thing.forGen("r1", Attribute("domain"-> List("foo", "bar")))
-    val t1 = Thing.forGen("t1", Attribute("domain"-> 15))
+    val r1 = Thing.forGen("r1").setAttributes("domain"-> List("foo", "bar"))
+    val t1 = Thing.forGen("t1").setAttributes("domain"-> 15)
 
 
-    val k: Equal[Int, Result] = 5 === 2
-    val conditionForO1 = EffectConditional((5 === 2) && ("foo" === "bar"))
-    val o1 = EffectOperation("o1", List(conditionForO1))
+    val conditionForO1 = Condition((5 === 2) && ("foo" === "bar"))
+    val o1 = Operation("o1", List(conditionForO1))
 
-    val conditionForO2 = EffectConditional("k" === "e")
-    val o2 = EffectOperation("o2", List(conditionForO2))
+    val conditionForO2 = Condition("k" === "e")
+    val o2 = Operation("o2", List(conditionForO2))
 
-    val t2 = Thing.forGen("t2", Attribute("someAttr" -> "kalle"))
+    val t2 = Thing.forGen("t2").setAttributes("someAttr" -> "kalle")
 
     val sop = OperationOrder.Specification("Sequential", OperationOrder.Sequential())
 
@@ -136,8 +156,13 @@ object Main {
     println(show(model.generated))
   }
 
-  /*
+
+
+
   def genExample(): Unit = {
+    import Generate.Implicits._
+    import Generate._
+
     val pointGen = CaseClassDefinition(
       "Point",
       FieldDefinition[Double]("x"),
@@ -152,11 +177,11 @@ object Main {
 
     val directory = Paths.get("codegen/generated")
 
-    val files = Stream(lineGen, pointGen) // Stream of Generate[A]
+    val files = fs2.Stream(lineGen, pointGen) // Stream of Generate[A]
       .map(g => ScalaFile(directory, g)) // Convert each Generate[A] to a ScalaFile[A] to be created in 'directory'
-      .flatMap(f => Generate.writeFile(f)) // Write files to disk
+      .flatMap(x => Generate.writeFile(x))
 
     files.compile.drain.unsafeRunSync()
   }
-  */
+
 }

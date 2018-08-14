@@ -29,7 +29,7 @@ object ScalaFile {
   def apply[A: Generate](rootPath: Path, relativePath: Path, name: String, gs: Seq[A]): ScalaFile[A] = new ScalaFile[A](rootPath, relativePath, name, gs.toList)
   def apply[A: Generate](relativePath: Path, name: String, gs: Seq[A]): ScalaFile[A] = apply(defaultProjectPath, relativePath, name, gs)
   def apply[A <: HasType: Generate](path: Path, g: A): ScalaFile[A] = apply(path, g.`type`, Seq(g))
-
+  def apply[A : Generate](path: Path, a: A, fileName: String): ScalaFile[A] = apply(path, fileName, Seq(a))
 
   def inProject[A: Generate](path: Path, name: String, contents: A*): ScalaFile[A] = new ScalaFile[A](defaultProjectPath, path, name, contents)
 }

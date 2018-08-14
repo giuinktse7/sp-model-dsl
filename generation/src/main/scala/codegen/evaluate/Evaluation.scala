@@ -7,7 +7,7 @@ import codegen.internal.Attribute.AttrString
 import codegen.model.Bool.IdentifiableGuard
 import codegen.model.Types.SPValue
 import codegen.model._
-import play.api.libs.json.{JsNumber, JsValue}
+import play.api.libs.json.{JsNumber, JsValue, Json, Writes}
 
 sealed trait SPStateValue {
   def toSPValue: Option[SPValue] = this match {
@@ -28,7 +28,7 @@ object SPStateValue {
   }
 
   object Value {
-    def apply[N](x: N)(implicit num: Numeric[N]): Value = Value(JsNumber(num.toDouble(x)))
+    def apply[A: Writes](a: A): Value = Value(Json.toJson(a))
   }
 }
 
@@ -40,7 +40,7 @@ object Evaluation {
 
   type Validate[A] = ValidatedNel[EvalError, A]
   type Logger[V] = Writer[Vector[LogMessage], V]
-  type Cond = EffectConditional[Unit]
+  type Cond = Condition
 
 
   def partitionInto[A, B, C](as: List[A])(f: A => Either[B, C]): (List[B], List[C]) = {
@@ -56,14 +56,14 @@ object Evaluation {
     def sequence[G[_], F[_], A](xs: F[G[A]])(implicit t: Traverse[F], app: Applicative[G]): G[F[A]] = xs.sequence
   }
 
-  def evalOperation(operation: EffectOperation[Unit], state: SPState)(implicit ctx: EvalContext): EvalResult = {
+  def evalOperation(operation: Operation, state: SPState)(implicit ctx: EvalContext): EvalResult = {
     validateEval(operation, state) match {
       case Validated.Valid(logger) => EvalSuccess.fromLogger(logger)
       case Validated.Invalid(es) => EvalFailure(es)
     }
   }
 
-  def validateEval(operation: EffectOperation[Unit], state: SPState)(implicit ctx: EvalContext): Validate[Logger[Boolean]] = {
+  def validateEval(operation: Operation, state: SPState)(implicit ctx: EvalContext): Validate[Logger[Boolean]] = {
     state.get(operation.id).fold(OperationMissingFromState(operation).invalidNel[Logger[Boolean]]: Validate[Logger[Boolean]]) {
       case Finished => true.pure[Logger].pure[Validate]
       case _: OperationMode =>
@@ -101,13 +101,24 @@ object Evaluation {
     }
   }
 
+  def evalBool(bool: Bool, s: SPState): Boolean = bool match {
+    case Bool.And(fst, snd) => evalBool(fst, s) && evalBool(snd, s)
+    case Bool.Or(fst, snd) => evalBool(fst, s) || evalBool(snd, s)
+    case Bool.Equal(lhs, rhs) => (lhs, rhs) match {
+      case (b1: Bool, b2: Bool) => evalBool(b1, s) == evalBool(b2, s)
+      case (a, b) => a == b
+    }
+    case Bool.Not(expr) => !evalBool(expr, s)
+    case guard@IdentifiableGuard(identified, _, _) => s.get(identified.id).exists(guard.test)
+  }
+
   def evalCondition(c: Cond, state: SPState): Boolean = {
-    import ConditionNode.{Definition, Value}
+    import ConditionNode.{Definition, Value, IdNode}
     c.proposition.forall {
-      case bool: Bool[Unit] => bool.eval
+      case bool: Bool => evalBool(bool, state)
       case Definition(_, _) => true
       case Value(_) => true
-      case guard@IdentifiableGuard(_, _, _) => guard.test(state.get)
+      case IdNode(_) => true
     }
   }
 
@@ -143,7 +154,6 @@ object Evaluation {
       case Decrement(amount) => Action.ifNumber(state.state(action.id)) { _ - amount }
     }
 
-    println("In domain?", domain.test(action.id, next))
     domain.test(action.id, next)
   }
 
